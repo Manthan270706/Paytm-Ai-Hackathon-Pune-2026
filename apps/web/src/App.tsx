@@ -10,12 +10,15 @@ import {
   DiscrepancySummary,
   CaseDetail,
   VerificationResult,
+  OutcomeMetrics,
+  IntegrationHealth,
 } from './types/api'
 import { Header } from './components/Header'
 import { MerchantDashboard } from './components/MerchantDashboard'
 import { ChatWorkspace } from './components/ChatWorkspace'
 import { OperationsConsole } from './components/OperationsConsole'
 import { TracePanel } from './components/TracePanel'
+import { IntegrationHealthModal } from './components/IntegrationHealthModal'
 
 const API_BASE = 'http://localhost:8000/api/v1'
 
@@ -45,11 +48,51 @@ export default function App() {
   const [isSimulating, setIsSimulating] = useState(false)
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null)
   const [isReplayMode, setIsReplayMode] = useState<boolean>(false)
+  const [metrics, setMetrics] = useState<OutcomeMetrics | null>(null)
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState<boolean>(false)
+  const [health, setHealth] = useState<IntegrationHealth | null>(null)
+  const [isLoadingHealth, setIsLoadingHealth] = useState<boolean>(false)
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState<boolean>(false)
 
   const token =
     currentRole === 'MERCHANT'
       ? 'demo-token-merchant-1'
       : 'demo-token-support_agent-1'
+
+  const loadMetrics = async () => {
+    try {
+      setIsLoadingMetrics(true)
+      const res = await fetch(`${API_BASE}/metrics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setMetrics(data.data)
+      }
+    } catch (err) {
+      console.error('Failed to load metrics', err)
+    } finally {
+      setIsLoadingMetrics(false)
+    }
+  }
+
+  const loadHealth = async () => {
+    try {
+      setIsLoadingHealth(true)
+      const res = await fetch(`${API_BASE}/health`)
+      if (res.ok) {
+        const data = await res.json()
+        setHealth(data.data)
+        if (data.data?.demo_deterministic) {
+          setIsReplayMode(true)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load health', err)
+    } finally {
+      setIsLoadingHealth(false)
+    }
+  }
 
   // Fetch initial dashboard and case data
   const loadDashboardData = async () => {
@@ -97,6 +140,10 @@ export default function App() {
           loadCaseDetail(targetId)
         }
       }
+
+      // 5. Outcome Metrics & Integration Health
+      loadMetrics()
+      loadHealth()
 
       setError(null)
     } catch (err: any) {
@@ -487,6 +534,10 @@ export default function App() {
         onResetDemo={handleResetDemo}
         isResetting={isResetting}
         isReplayMode={isReplayMode}
+        onOpenHealth={() => {
+          setIsHealthModalOpen(true)
+          loadHealth()
+        }}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
@@ -538,6 +589,9 @@ export default function App() {
               loadCaseDetail(id)
             }}
             isLoadingDetail={isLoadingDetail}
+            metrics={metrics}
+            onRefreshMetrics={loadMetrics}
+            isLoadingMetrics={isLoadingMetrics}
           />
         )}
       </main>
@@ -547,6 +601,13 @@ export default function App() {
         isOpen={isTraceOpen}
         onClose={() => setIsTraceOpen(false)}
         runId={activeRunId}
+      />
+
+      <IntegrationHealthModal
+        isOpen={isHealthModalOpen}
+        onClose={() => setIsHealthModalOpen(false)}
+        health={health}
+        isLoading={isLoadingHealth}
       />
     </div>
   )

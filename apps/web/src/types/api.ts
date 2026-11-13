@@ -155,3 +155,33 @@ export interface VerificationResult {
   verifier_role?: string
 }
 
+export interface OutcomeMetrics {
+  time_to_first_response_seconds: number
+  time_to_verified_resolution_minutes: number
+  straight_through_processing_rate_percent: number
+  total_cases_handled: number
+  total_cases_escalated: number
+  repeat_explanations_avoided: number
+}
+
+export interface IntegrationHealth {
+  status: string
+  environment: string
+  demo_data_mode: boolean
+  demo_deterministic: boolean
+  llm_provider: string
+  voice_provider: string
+  payment_provider: {
+    active: string
+    status: string
+    environment: string
+  }
+  settlement_ops_adapter: string
+  services: {
+    api: string
+    database: string
+    verifier_role: string
+  }
+}
+
+

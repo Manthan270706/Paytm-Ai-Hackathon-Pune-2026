@@ -3,10 +3,12 @@ import {
   SupportCaseItem,
   CaseDetail,
   VerificationResult,
+  OutcomeMetrics,
 } from '../types/api'
 import { SourceBadge } from './SourceBadge'
 import { ApprovalModal } from './ApprovalModal'
 import { RejectModal } from './RejectModal'
+import { MetricsTile } from './MetricsTile'
 import {
   ShieldAlert,
   CheckCircle2,
@@ -41,6 +43,9 @@ interface OperationsConsoleProps {
   activeCaseDetail: CaseDetail | null
   onSelectCase: (caseId: string) => void
   isLoadingDetail?: boolean
+  metrics?: OutcomeMetrics | null
+  onRefreshMetrics?: () => void
+  isLoadingMetrics?: boolean
 }
 
 const QUEUES = [
@@ -74,6 +79,9 @@ export const OperationsConsole: FC<OperationsConsoleProps> = ({
   activeCaseDetail,
   onSelectCase,
   isLoadingDetail = false,
+  metrics,
+  onRefreshMetrics,
+  isLoadingMetrics = false,
 }) => {
   const [selectedQueue, setSelectedQueue] = useState('ALL')
   const [selectedStatus, setSelectedStatus] = useState('ALL')
@@ -207,6 +215,13 @@ export const OperationsConsole: FC<OperationsConsoleProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Real-time Operational Outcome Metrics Tile */}
+      <MetricsTile
+        metrics={metrics || null}
+        onRefresh={onRefreshMetrics}
+        isLoading={isLoadingMetrics}
+      />
 
       {/* Filters & Search Toolbar */}
       <div className="p-4 bg-slate-900/70 rounded-2xl border border-slate-800 space-y-3">
