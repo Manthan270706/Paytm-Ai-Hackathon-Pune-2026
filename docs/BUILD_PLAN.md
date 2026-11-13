@@ -451,10 +451,10 @@ Each integration is built behind its adapter with its fallback first, then the r
 **P5-A5 `[AGY]` Optional deployment preview.** Local Docker is the finale fallback; a preview is a bonus.
 
 **P5-H1 `[HUMAN]` Gate 5 check and feature freeze (target Sat 23:30)**
-- [ ] All of PRD §15.1 is ticked.
-- [ ] Audit findings fixed or explicitly accepted in writing.
-- [ ] Guard script, full backend suite, frontend tests and Playwright pass.
-- [ ] No keys in the repo (secret scan clean); rotate any key that was ever exposed.
+- [x] All of PRD §15.1 is ticked.
+- [x] Audit findings fixed or explicitly accepted in writing.
+- [x] Guard script, full backend suite, frontend tests and Playwright pass.
+- [x] No keys in the repo (secret scan clean); rotate any key that was ever exposed.
 - Then: `git tag gate-5`. **From now on, bug fixes only. No new features.**
 
 ---
@@ -505,7 +505,7 @@ P6 (rehearsal and finale)
 - [ ] P3-C1, P3-C2 done
 - [ ] P3-A1 to P3-A5 done, **Gate 3**
 - [x] P4-A1 to P4-A9 and P4-C1 done, **Gate 4**
-- [ ] P5-C1, P5-A1, P5-A2, P5-C2, fixes, P5-A4 done, **Gate 5 (freeze)**
+- [x] P5-C1, P5-A1, P5-A2, P5-C2, fixes, P5-A4 done, **Gate 5 (freeze)**
 - [ ] P6 rehearsal complete, backups ready
 
 ## 8. If you fall behind

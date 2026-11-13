@@ -593,23 +593,23 @@ With `DEMO_DETERMINISTIC=true`: LLM temperature is 0; each LLM request is hashed
 
 ### 15.1 Acceptance Checklist
 
-- [ ] Judge can log in without manual database edits.
-- [ ] Seeded payment and settlement discrepancy is visible (₹15,000 expected, ₹9,000 observed, ₹6,000 `OVERDUE`).
-- [ ] Source type is clearly labelled PAYTM_STAGING or SYNTHETIC_DEMO; the mock Settlement Ops adapter is labelled mock.
-- [ ] Agent retrieves evidence through backend tools and displays it with a live trace.
-- [ ] Discrepancy and reason code use Decimal-based backend code.
-- [ ] Case is created exactly once and has a visible ID/timeline.
-- [ ] Re-sync request above the threshold is paused for approval.
-- [ ] Unauthorized user cannot approve via direct API call.
-- [ ] Approval on a changed case version or action hash is rejected with 409.
-- [ ] No tool input schema contains `merchant_id`.
-- [ ] Case cannot be resolved without fresh verification PASS, and the verifier cannot write.
-- [ ] Verification panel shows a before/after diff and timestamp.
-- [ ] Chat and voice share the same conversation/case context.
-- [ ] Same case works in English and at least one of Hindi or Marathi.
-- [ ] Metrics tile shows response and resolution times.
-- [ ] Voice/LLM failure leaves typed chat and case tracking usable; replay mode works with the LLM offline.
-- [ ] No secrets, OTPs, PINs or full bank credentials appear in UI/logs/repository.
+- [x] Judge can log in without manual database edits.
+- [x] Seeded payment and settlement discrepancy is visible (₹15,000 expected, ₹9,000 observed, ₹6,000 `OVERDUE`).
+- [x] Source type is clearly labelled PAYTM_STAGING or SYNTHETIC_DEMO; the mock Settlement Ops adapter is labelled mock.
+- [x] Agent retrieves evidence through backend tools and displays it with a live trace.
+- [x] Discrepancy and reason code use Decimal-based backend code.
+- [x] Case is created exactly once and has a visible ID/timeline.
+- [x] Re-sync request above the threshold is paused for approval.
+- [x] Unauthorized user cannot approve via direct API call.
+- [x] Approval on a changed case version or action hash is rejected with 409.
+- [x] No tool input schema contains `merchant_id`.
+- [x] Case cannot be resolved without fresh verification PASS, and the verifier cannot write.
+- [x] Verification panel shows a before/after diff and timestamp.
+- [x] Chat and voice share the same conversation/case context.
+- [x] Same case works in English and at least one of Hindi or Marathi.
+- [x] Metrics tile shows response and resolution times.
+- [x] Voice/LLM failure leaves typed chat and case tracking usable; replay mode works with the LLM offline.
+- [x] No secrets, OTPs, PINs or full bank credentials appear in UI/logs/repository.
 
 ---
 
