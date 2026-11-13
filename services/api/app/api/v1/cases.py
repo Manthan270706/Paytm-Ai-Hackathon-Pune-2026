@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas import (
+    ApprovalSummaryResponse,
     CaseApproveRequest,
     CaseAssignRequest,
     CaseCreateRequest,
@@ -218,6 +219,10 @@ async def get_case(
     ev_stmt = select(CaseEvent).where(CaseEvent.case_id == case.id).order_by(CaseEvent.created_at)
     events = list((await session.execute(ev_stmt)).scalars().all())
 
+    # Hide internal notes/events from merchants
+    if auth.role.upper() == "MERCHANT":
+        events = [e for e in events if e.visibility != "INTERNAL"]
+
     timeline = [
         CaseEventResponse(
             id=e.id,
@@ -231,6 +236,26 @@ async def get_case(
         )
         for e in events
     ]
+
+    # Fetch latest approval if any
+    app_stmt = (
+        select(Approval)
+        .where(Approval.case_id == case.id)
+        .order_by(Approval.created_at.desc())
+    )
+    approval = (await session.execute(app_stmt)).scalars().first()
+    pending_approval = None
+    if approval:
+        pending_approval = ApprovalSummaryResponse(
+            id=approval.id,
+            action=approval.action,
+            action_hash=approval.action_hash,
+            status=approval.status,
+            decision=approval.decision,
+            case_version=approval.case_version,
+            created_at=approval.created_at,
+            reason=approval.reason,
+        )
 
     return success_response(
         data=CaseDetailResponse(
@@ -246,6 +271,7 @@ async def get_case(
             created_at=case.created_at,
             updated_at=case.created_at,
             timeline=timeline,
+            pending_approval=pending_approval,
         ).model_dump(),
         source_type="SYNTHETIC_DEMO",
     )

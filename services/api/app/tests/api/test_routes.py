@@ -138,6 +138,48 @@ def test_case_lifecycle_routes() -> None:
     assert detail_res.status_code == 200
     assert len(detail_res.json()["data"]["timeline"]) >= 1
 
+    # Merchant cannot approve (403)
+    merchant_app_res = client.post(
+        f"/api/v1/cases/{case_id}/approve",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={"expected_version": version, "action_hash": "hash123"},
+    )
+    assert merchant_app_res.status_code == 403
+
+    # Merchant cannot reject (403)
+    merchant_rej_res = client.post(
+        f"/api/v1/cases/{case_id}/reject",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={"expected_version": version, "action_hash": "hash123", "reason": "unauthorized"},
+    )
+    assert merchant_rej_res.status_code == 403
+
+    # Merchant cannot assign (403)
+    merchant_assign_res = client.post(
+        f"/api/v1/cases/{case_id}/assign",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={"expected_version": version, "queue": "SETTLEMENT_OPS"},
+    )
+    assert merchant_assign_res.status_code == 403
+
+    # Invalid queue validation (400)
+    bad_queue_res = client.post(
+        f"/api/v1/cases/{case_id}/assign",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        json={"expected_version": version, "queue": "INVALID_QUEUE"},
+    )
+    assert bad_queue_res.status_code == 400
+
+    # Assign queue as support role succeeds
+    assign_res = client.post(
+        f"/api/v1/cases/{case_id}/assign",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        json={"expected_version": version, "queue": "ESCALATIONS"},
+    )
+    assert assign_res.status_code == 200
+    assert assign_res.json()["data"]["queue"] == "ESCALATIONS"
+    version = assign_res.json()["data"]["new_version"]
+
     # Approve case action as support role
     app_res = client.post(
         f"/api/v1/cases/{case_id}/approve",
@@ -146,13 +188,14 @@ def test_case_lifecycle_routes() -> None:
     )
     assert app_res.status_code == 200
     assert app_res.json()["data"]["status"] == "APPROVED"
+    version = app_res.json()["data"]["new_version"]
 
     # Reject case action as support role
     rej_res = client.post(
         f"/api/v1/cases/{case_id}/reject",
         headers={"Authorization": "Bearer demo-token-support_agent-1"},
         json={
-            "expected_version": version + 1,
+            "expected_version": version,
             "action_hash": "hash123",
             "reason": "Requires bank UTR",
         },
