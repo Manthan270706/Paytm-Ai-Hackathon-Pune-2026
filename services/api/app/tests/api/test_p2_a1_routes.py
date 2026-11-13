@@ -9,7 +9,6 @@ from app.main import app
 client = TestClient(app)
 
 
-
 def test_400_validation_error() -> None:
     # 1. Missing Idempotency-Key header returns 400
     res = client.post(
