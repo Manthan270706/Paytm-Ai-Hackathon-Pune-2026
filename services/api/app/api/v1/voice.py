@@ -41,11 +41,19 @@ async def create_voice_session(
     conv_id = req.conversation_id or uuid.uuid4()
 
     # Find or create conversation with VOICE channel
-    conv_stmt = select(Conversation).where(
-        Conversation.id == conv_id,
-        Conversation.merchant_id == merchant_id,
-    )
-    conv = (await session.execute(conv_stmt)).scalars().first()
+    if req.conversation_id:
+        existing_conv = (
+            await session.execute(
+                select(Conversation).where(Conversation.id == conv_id)
+            )
+        ).scalars().first()
+        if existing_conv and existing_conv.merchant_id != merchant_id:
+            from app.core.exceptions import ForbiddenError
+
+            raise ForbiddenError("Access to foreign merchant conversation is denied")
+        conv = existing_conv
+    else:
+        conv = None
 
     now = datetime.now(UTC)
     if conv is None:
