@@ -32,28 +32,30 @@ async def get_auth_context(
     session: Annotated[AsyncSession, Depends(get_db_session)] = None,  # type: ignore[assignment]
 ) -> AuthContext:
     """Extract authenticated user and bound merchant scope from session token."""
+    if authorization is None:
+        raise UnauthorizedError("A valid bearer session token is required")
+
     role = "MERCHANT"
     target_user_id = MERCHANT_USER_ID
     active_mid = MERCHANT_ID
 
-    if authorization is not None:
-        scheme, separator, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not separator or not token.strip():
-            raise UnauthorizedError("A valid bearer session token is required")
-        identity = parse_demo_token(token)
-        if identity is None:
-            raise UnauthorizedError("Invalid or expired session token")
-        role = identity.role
-        if role == "SUPPORT_AGENT":
-            target_user_id = SUPPORT_USER_ID
-        elif role == "SUPERVISOR":
-            target_user_id = SUPERVISOR_USER_ID
-        elif role == "MERCHANT":
-            if identity.subject == "2":
-                active_mid = uuid.UUID("22222222-2222-2222-2222-222222222222")
-                target_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, "merchant2@paytm.demo")
-            else:
-                target_user_id = MERCHANT_USER_ID
+    scheme, separator, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not separator or not token.strip():
+        raise UnauthorizedError("A valid bearer session token is required")
+    identity = parse_demo_token(token)
+    if identity is None:
+        raise UnauthorizedError("Invalid or expired session token")
+    role = identity.role
+    if role == "SUPPORT_AGENT":
+        target_user_id = SUPPORT_USER_ID
+    elif role == "SUPERVISOR":
+        target_user_id = SUPERVISOR_USER_ID
+    elif role == "MERCHANT":
+        if identity.subject == "2":
+            active_mid = uuid.UUID("22222222-2222-2222-2222-222222222222")
+            target_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, "merchant2@paytm.demo")
+        else:
+            target_user_id = MERCHANT_USER_ID
 
     # Fetch user from DB if session exists
     if session:

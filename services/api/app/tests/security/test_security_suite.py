@@ -275,6 +275,20 @@ def test_unauthorized_role_cannot_approve_through_direct_api(
     assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
+def test_protected_routes_reject_missing_or_malformed_bearer_auth() -> None:
+    cases_response = client.get("/api/v1/cases")
+    assert cases_response.status_code == 401
+
+    metrics_response = client.get("/api/v1/metrics", headers={"Authorization": ""})
+    assert metrics_response.status_code == 401
+
+    verify_response = client.post(
+        f"/api/v1/cases/{uuid.uuid4()}/verify",
+        headers={"Authorization": "Basic not-a-session"},
+    )
+    assert verify_response.status_code == 401
+
+
 def test_tool_schemas_never_accept_merchant_id() -> None:
     for tool in ALL_TOOLS:
         assert "merchant_id" not in tool.input_schema.model_fields, (
