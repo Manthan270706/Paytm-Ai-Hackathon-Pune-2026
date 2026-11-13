@@ -145,6 +145,9 @@ class VoiceTranscriptionResponse(BaseModel):
     reply_text: str
     reply_audio_url: str | None = None
     language: str
+    run_id: uuid.UUID | None = None
+    active_case_id: uuid.UUID | None = None
+    evidence_summary: dict[str, Any] | None = None
 
 
 # ------------------------------------------------------------------------------

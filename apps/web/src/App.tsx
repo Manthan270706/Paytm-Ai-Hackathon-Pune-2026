@@ -31,6 +31,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [evidenceSummary, setEvidenceSummary] = useState<DiscrepancySummary | null>(null)
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [activeCaseDetail, setActiveCaseDetail] = useState<CaseDetail | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false)
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
@@ -126,6 +127,7 @@ export default function App() {
   }, [currentRole])
 
   // Handle sending a message to the agent
+  // Handle sending a message to the agent
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -133,6 +135,7 @@ export default function App() {
       content: text,
       language: currentLanguage,
       created_at: new Date().toISOString(),
+      channel: 'CHAT',
     }
     setMessages((prev) => [...prev, userMsg])
     setIsSending(true)
@@ -145,6 +148,7 @@ export default function App() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          conversation_id: conversationId || undefined,
           message: text,
           language: currentLanguage,
         }),
@@ -160,9 +164,13 @@ export default function App() {
         content: agentData.reply,
         language: agentData.language,
         created_at: new Date().toISOString(),
+        channel: 'CHAT',
       }
       setMessages((prev) => [...prev, botMsg])
 
+      if (agentData.conversation_id) {
+        setConversationId(agentData.conversation_id)
+      }
       if (agentData.evidence_summary) {
         setEvidenceSummary(agentData.evidence_summary)
       }
@@ -183,6 +191,92 @@ export default function App() {
         id: `msg-err-${Date.now()}`,
         role: 'ASSISTANT',
         content: `Error contacting agent: ${err.message}`,
+        language: 'en',
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, errorMsg])
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  // Handle submitting voice transcript with channel continuity
+  const handleSendVoice = async (transcript: string) => {
+    const userMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'USER',
+      content: transcript,
+      language: currentLanguage,
+      created_at: new Date().toISOString(),
+      channel: 'VOICE',
+    }
+    setMessages((prev) => [...prev, userMsg])
+    setIsSending(true)
+
+    try {
+      const res = await fetch(`${API_BASE}/voice/transcriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId || undefined,
+          transcript,
+          language: currentLanguage,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Voice transcription processing failed')
+      const data = await res.json()
+      const voiceData = data.data
+
+      const botMsg: ChatMessage = {
+        id: `msg-${Date.now()}-bot`,
+        role: 'ASSISTANT',
+        content: voiceData.reply_text,
+        language: voiceData.language,
+        created_at: new Date().toISOString(),
+        channel: 'VOICE',
+      }
+      setMessages((prev) => [...prev, botMsg])
+
+      if (voiceData.conversation_id) {
+        setConversationId(voiceData.conversation_id)
+      }
+      if (voiceData.evidence_summary) {
+        setEvidenceSummary(voiceData.evidence_summary)
+      }
+      if (voiceData.active_case_id) {
+        setActiveCaseId(voiceData.active_case_id)
+      }
+
+      // Stream SSE trace events for this run
+      if (voiceData.run_id) {
+        setActiveRunId(voiceData.run_id)
+        startSseTrace(voiceData.run_id)
+      }
+
+      // Spoken reply with browser synthesis per PRD §5.2
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(voiceData.reply_text)
+        utterance.lang =
+          voiceData.language === 'hi'
+            ? 'hi-IN'
+            : voiceData.language === 'mr'
+              ? 'mr-IN'
+              : 'en-IN'
+        window.speechSynthesis.speak(utterance)
+      }
+
+      // Refresh cases list
+      loadDashboardData()
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
+        role: 'ASSISTANT',
+        content: `Error processing voice turn: ${err.message}`,
         language: 'en',
         created_at: new Date().toISOString(),
       }
@@ -225,6 +319,7 @@ export default function App() {
         setTraceEvents([])
         setEvidenceSummary(null)
         setActiveCaseId(null)
+        setConversationId(null)
         setActiveCaseDetail(null)
         setVerificationResult(null)
         await loadDashboardData()
@@ -391,10 +486,13 @@ export default function App() {
                 messages={messages}
                 evidenceSummary={evidenceSummary}
                 onSendMessage={handleSendMessage}
+                onSubmitVoice={handleSendVoice}
                 isSending={isSending}
                 onToggleTrace={() => setIsTraceOpen(!isTraceOpen)}
                 traceCount={traceEvents.length}
                 activeCaseId={activeCaseId}
+                currentLanguage={currentLanguage}
+                activeConversationId={conversationId}
               />
             </div>
           </>
