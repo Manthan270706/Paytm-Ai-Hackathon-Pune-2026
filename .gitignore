@@ -73,3 +73,5 @@ recordings/
 temp/
 scratch/
 .worktrees/
+test-results/
+playwright-report/
