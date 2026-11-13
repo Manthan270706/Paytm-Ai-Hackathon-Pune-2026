@@ -29,13 +29,15 @@ async def run_agent_turn(
     # 1. Lookup or create conversation
     conv: Conversation | None = None
     if conversation_id:
-        res = await session.execute(
-            select(Conversation).where(
-                Conversation.id == conversation_id,
-                Conversation.merchant_id == merchant_id,
-            )
+        res_any = await session.execute(
+            select(Conversation).where(Conversation.id == conversation_id)
         )
-        conv = res.scalars().first()
+        existing = res_any.scalars().first()
+        if existing and existing.merchant_id != merchant_id:
+            from app.core.exceptions import ForbiddenError
+
+            raise ForbiddenError("Access to foreign merchant conversation is denied")
+        conv = existing
 
     if not conv:
         conv = Conversation(

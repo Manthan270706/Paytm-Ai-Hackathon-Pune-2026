@@ -474,12 +474,18 @@ async def verify_case(
     case_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     verifier_session: Annotated[AsyncSession, Depends(get_verifier_db)],
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
 ) -> dict:
     now = datetime.now(UTC)
     stmt = select(SupportCase).where(SupportCase.id == case_id)
     case = (await session.execute(stmt)).scalar_one_or_none()
+    if not case:
+        raise NotFoundError(f"Case {case_id} not found")
 
-    if case and case.status == "VERIFYING":
+    if auth.role.upper() == "MERCHANT" and case.merchant_id != auth.active_merchant_id:
+        raise ForbiddenError("Access to foreign merchant case verification is denied")
+
+    if case.status == "VERIFYING":
         res = await verify_resolution(
             case_id=case_id,
             rule="RECONCILE_DISCREPANCY_ZERO",

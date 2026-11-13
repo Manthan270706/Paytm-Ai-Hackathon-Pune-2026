@@ -3,15 +3,14 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas import OutcomeMetricsResponse
-from app.core.auth import parse_demo_token
+from app.core.dependencies import AuthContext, get_auth_context
 from app.core.response import success_response
 from app.db.models import CaseEvent, SupportCase
-from app.db.seed import MERCHANT_ID
 from app.db.session import get_db_session
 
 router = APIRouter()
@@ -20,17 +19,12 @@ router = APIRouter()
 @router.get("/metrics", summary="Outcome metrics calculated from case events")
 async def get_outcome_metrics(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    authorization: Annotated[str | None, Header()] = None,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
 ) -> dict:
     """Compute role-filtered outcome metrics from case_events."""
-    filter_merchant_id: uuid.UUID | None = None
-
-    if authorization is not None:
-        scheme, separator, token = authorization.partition(" ")
-        if scheme.lower() == "bearer" and separator and token.strip():
-            identity = parse_demo_token(token.strip())
-            if identity and identity.role.upper() == "MERCHANT":
-                filter_merchant_id = MERCHANT_ID
+    filter_merchant_id: uuid.UUID | None = (
+        auth.active_merchant_id if auth.role.upper() == "MERCHANT" else None
+    )
 
     # 1. Fetch relevant cases
     cases_query = select(SupportCase)

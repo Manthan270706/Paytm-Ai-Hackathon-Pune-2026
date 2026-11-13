@@ -512,6 +512,9 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/cases/${caseId}/verify`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
       if (res.ok) {
         const data = await res.json()
