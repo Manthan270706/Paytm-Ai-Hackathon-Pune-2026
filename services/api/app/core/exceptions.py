@@ -13,13 +13,13 @@ class OpsSaathiError(Exception):
         self.details = details
 
 
-class ConflictError(OpsSaathiError):
-    """Raised when an optimistic concurrency or state version conflict occurs."""
+class UnauthorizedError(OpsSaathiError):
+    """Raised when authentication credentials are missing or invalid."""
 
     def __init__(
-        self, message: str = "Version conflict detected", details: Any | None = None
+        self, message: str = "Authentication required", details: Any | None = None
     ) -> None:
-        super().__init__(message=message, code="CONFLICT", details=details)
+        super().__init__(message=message, code="UNAUTHORIZED", details=details)
 
 
 class ForbiddenError(OpsSaathiError):
@@ -34,3 +34,28 @@ class NotFoundError(OpsSaathiError):
 
     def __init__(self, message: str = "Resource not found", details: Any | None = None) -> None:
         super().__init__(message=message, code="NOT_FOUND", details=details)
+
+
+class ConflictError(OpsSaathiError):
+    """Raised when an optimistic concurrency or state version conflict occurs."""
+
+    def __init__(
+        self, message: str = "Version conflict detected", details: Any | None = None
+    ) -> None:
+        super().__init__(message=message, code="CONFLICT", details=details)
+
+
+class ValidationError(OpsSaathiError):
+    """Raised when client input or parameter validation fails."""
+
+    def __init__(self, message: str = "Validation failed", details: Any | None = None) -> None:
+        super().__init__(message=message, code="VALIDATION_ERROR", details=details)
+
+
+class RateLimitError(OpsSaathiError):
+    """Raised when client exceeds rate limits."""
+
+    def __init__(
+        self, message: str = "Too many requests. Please slow down.", details: Any | None = None
+    ) -> None:
+        super().__init__(message=message, code="RATE_LIMITED", details=details)

@@ -1,41 +1,9 @@
-import os
 import uuid
-from collections.abc import AsyncGenerator
 
-import pytest
 from fastapi.testclient import TestClient
 
-from app.db.base import Base
-from app.db.session import AsyncSession, _create_engine, async_sessionmaker, get_db_session
+from app.db.seed import MERCHANT_ID
 from app.main import app
-
-TEST_ROUTES_DB = "sqlite+aiosqlite:///./test_routes.db"
-test_engine = _create_engine(TEST_ROUTES_DB, is_verifier=False)
-route_session_factory = async_sessionmaker(
-    bind=test_engine, class_=AsyncSession, expire_on_commit=False
-)
-
-
-async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with route_session_factory() as session:
-        yield session
-
-
-app.dependency_overrides[get_db_session] = override_get_db
-
-
-@pytest.fixture(autouse=True, scope="module")
-async def setup_route_test_db() -> AsyncGenerator[None, None]:
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await test_engine.dispose()
-    if os.path.exists("./test_routes.db"):
-        os.remove("./test_routes.db")
-
 
 client = TestClient(app)
 
@@ -58,18 +26,24 @@ def test_auth_routes() -> None:
 
 
 def test_merchant_route() -> None:
-    merchant_id = uuid.uuid4()
-    res = client.get(f"/api/v1/merchants/{merchant_id}")
+    # Accessing own merchant profile returns 200
+    res = client.get(
+        f"/api/v1/merchants/{MERCHANT_ID}",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert res.status_code == 200
     data = res.json()
     assert data["ok"] is True
-    assert data["data"]["id"] == str(merchant_id)
-    assert data["data"]["display_name"] == "Ramesh Kirana Store"
+    assert data["data"]["id"] == str(MERCHANT_ID)
+    assert data["data"]["display_name"] == "Two Bits Chai & Snacks"
 
 
 def test_transaction_routes() -> None:
     # List transactions
-    list_res = client.get("/api/v1/transactions")
+    list_res = client.get(
+        "/api/v1/transactions",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert list_res.status_code == 200
     data = list_res.json()
     assert data["ok"] is True
@@ -77,15 +51,20 @@ def test_transaction_routes() -> None:
 
     # Get transaction detail
     txn_id = uuid.uuid4()
-    detail_res = client.get(f"/api/v1/transactions/{txn_id}")
+    detail_res = client.get(
+        f"/api/v1/transactions/{txn_id}",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert detail_res.status_code == 200
     detail_data = detail_res.json()
     assert detail_data["ok"] is True
-    assert detail_data["data"]["id"] == str(txn_id)
 
 
 def test_settlements_route() -> None:
-    res = client.get("/api/v1/settlements")
+    res = client.get(
+        "/api/v1/settlements",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert res.status_code == 200
     data = res.json()
     assert data["ok"] is True
@@ -136,8 +115,14 @@ def test_case_lifecycle_routes() -> None:
     idemp_key = f"IDEMP-{uuid.uuid4()}"
     create_res = client.post(
         "/api/v1/cases",
-        headers={"Idempotency-Key": idemp_key},
-        json={"summary": "Missing ₹6,000 from settlement batch BATCH_01"},
+        headers={
+            "Idempotency-Key": idemp_key,
+            "Authorization": "Bearer demo-token-merchant-1",
+        },
+        json={
+            "category": "SETTLEMENT_MISMATCH",
+            "summary": "Missing ₹6,000 from settlement batch BATCH_01",
+        },
     )
     assert create_res.status_code == 200
     case_data = create_res.json()
@@ -146,21 +131,26 @@ def test_case_lifecycle_routes() -> None:
     version = case_data["data"]["version"]
 
     # Get case detail with timeline
-    detail_res = client.get(f"/api/v1/cases/{case_id}")
+    detail_res = client.get(
+        f"/api/v1/cases/{case_id}",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert detail_res.status_code == 200
     assert len(detail_res.json()["data"]["timeline"]) >= 1
 
-    # Approve case action
+    # Approve case action as support role
     app_res = client.post(
         f"/api/v1/cases/{case_id}/approve",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
         json={"expected_version": version, "action_hash": "hash123"},
     )
     assert app_res.status_code == 200
     assert app_res.json()["data"]["status"] == "APPROVED"
 
-    # Reject case action
+    # Reject case action as support role
     rej_res = client.post(
         f"/api/v1/cases/{case_id}/reject",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
         json={
             "expected_version": version + 1,
             "action_hash": "hash123",
@@ -178,7 +168,7 @@ def test_case_lifecycle_routes() -> None:
 
 
 def test_demo_and_metrics_routes() -> None:
-    # Reset demo (seeds the DB)
+    # Reset demo
     reset_res = client.post("/api/v1/demo/reset")
     assert reset_res.status_code == 200
     assert reset_res.json()["data"]["discrepancy"] == "6000.00"

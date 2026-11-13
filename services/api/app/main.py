@@ -1,6 +1,12 @@
+import uuid
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
 from app.api.v1.agent import router as agent_router
 from app.api.v1.auth import router as auth_router
@@ -14,6 +20,15 @@ from app.api.v1.transactions import router as transactions_router
 from app.api.v1.voice import router as voice_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.core.config import settings
+from app.core.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    OpsSaathiError,
+    RateLimitError,
+    UnauthorizedError,
+    ValidationError,
+)
 from app.core.response import error_response
 
 app = FastAPI(
@@ -25,7 +40,22 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
 )
 
-# CORS restriction
+
+# ------------------------------------------------------------------------------
+# Request ID Middleware
+# ------------------------------------------------------------------------------
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next: Callable[[Request], Any]) -> Response:
+    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = req_id
+    response: Response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
+
+
+# ------------------------------------------------------------------------------
+# CORS Restriction per PRD §13
+# ------------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"],
@@ -34,7 +64,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include All Routers under /api/v1 per PRD §9
+# ------------------------------------------------------------------------------
+# Routers Mounted under /api/v1 per PRD §9
+# ------------------------------------------------------------------------------
 app.include_router(health_router, prefix="/api/v1", tags=["Health"])
 app.include_router(auth_router, prefix="/api/v1", tags=["Auth"])
 app.include_router(merchants_router, prefix="/api/v1", tags=["Merchants"])
@@ -60,13 +92,111 @@ async def root() -> dict:
     }
 
 
+# ------------------------------------------------------------------------------
+# Exception Handlers Mapping Domain Errors to Standard Response Envelope
+# ------------------------------------------------------------------------------
+@app.exception_handler(NotFoundError)
+async def not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=404,
+        content=error_response(
+            code="NOT_FOUND", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(ForbiddenError)
+async def forbidden_handler(request: Request, exc: ForbiddenError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=403,
+        content=error_response(
+            code="FORBIDDEN", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(UnauthorizedError)
+async def unauthorized_handler(request: Request, exc: UnauthorizedError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=401,
+        content=error_response(
+            code="UNAUTHORIZED", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(ConflictError)
+async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=409,
+        content=error_response(
+            code="CONFLICT", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(ValidationError)
+async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=400,
+        content=error_response(
+            code="VALIDATION_ERROR", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=429,
+        content=error_response(
+            code="RATE_LIMITED", message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def pydantic_validation_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=400,
+        content=error_response(
+            code="VALIDATION_ERROR",
+            message="Request body or query parameter validation failed.",
+            details=exc.errors(),
+            request_id=req_id,
+        ),
+    )
+
+
+@app.exception_handler(OpsSaathiError)
+async def opssaathi_error_handler(request: Request, exc: OpsSaathiError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=400,
+        content=error_response(
+            code=exc.code, message=exc.message, details=exc.details, request_id=req_id
+        ),
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
     return JSONResponse(
         status_code=500,
         content=error_response(
             code="INTERNAL_SERVER_ERROR",
             message="An unexpected error occurred. Please try again or contact support.",
             details=str(exc) if settings.APP_ENV == "development" else None,
+            request_id=req_id,
         ),
     )
