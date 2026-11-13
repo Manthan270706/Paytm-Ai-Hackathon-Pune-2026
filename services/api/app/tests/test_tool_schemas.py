@@ -31,19 +31,9 @@ def test_tool_schemas_are_pydantic_models() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tool_stubs_raise_not_implemented() -> None:
+async def test_all_11_tools_execute() -> None:
     ctx = ToolContext(merchant_id=uuid.uuid4(), session=None)  # type: ignore[arg-type]
-    implemented = {
-        "get_merchant_context",
-        "find_transactions",
-        "get_settlement_entries",
-        "calculate_discrepancy",
-    }
     for tool in ALL_TOOLS:
         dummy_input = tool.input_schema.model_construct()
-        if tool.name in implemented:
-            res = await tool.runner(dummy_input, ctx)
-            assert isinstance(res, tool.output_schema)
-        else:
-            with pytest.raises(NotImplementedError):
-                await tool.runner(dummy_input, ctx)
+        res = await tool.runner(dummy_input, ctx)
+        assert isinstance(res, tool.output_schema)

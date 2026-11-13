@@ -39,7 +39,9 @@ async def send_agent_message(
     active_case_id = result_state.get("active_case_id")
     reply = result_state.get("final_reply", "I have investigated your request.")
     intent = result_state.get("intent", "SETTLEMENT_MISMATCH")
-    recon_summary = result_state.get("reconciliation_summary")
+    recon_summary = (
+        result_state.get("evidence_summary") or result_state.get("reconciliation_summary")
+    )
 
     return success_response(
         data=AgentMessageResponse(
