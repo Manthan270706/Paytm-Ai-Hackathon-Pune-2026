@@ -7,6 +7,7 @@ from fastapi import Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import is_role_allowed, parse_demo_token
 from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.db.models import User
 from app.db.scoped_repository import ScopedRepository
@@ -35,28 +36,31 @@ async def get_auth_context(
     target_user_id = MERCHANT_USER_ID
     active_mid = MERCHANT_ID
 
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split("Bearer ", 1)[1].strip()
-        if "support_agent" in token or "support" in token:
-            role = "SUPPORT_AGENT"
-            target_user_id = SUPPORT_USER_ID
-        elif "supervisor" in token:
-            role = "SUPERVISOR"
-            target_user_id = SUPERVISOR_USER_ID
-        elif "merchant-2" in token or "merchant_2" in token:
-            role = "MERCHANT"
-            active_mid = uuid.UUID("22222222-2222-2222-2222-222222222222")
-            target_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, "merchant2@paytm.demo")
-        elif "merchant" in token:
-            role = "MERCHANT"
-            target_user_id = MERCHANT_USER_ID
-        elif token.startswith("invalid"):
+    if authorization is not None:
+        scheme, separator, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not separator or not token.strip():
+            raise UnauthorizedError("A valid bearer session token is required")
+        identity = parse_demo_token(token)
+        if identity is None:
             raise UnauthorizedError("Invalid or expired session token")
+        role = identity.role
+        if role == "SUPPORT_AGENT":
+            target_user_id = SUPPORT_USER_ID
+        elif role == "SUPERVISOR":
+            target_user_id = SUPERVISOR_USER_ID
+        elif role == "MERCHANT":
+            if identity.subject == "2":
+                active_mid = uuid.UUID("22222222-2222-2222-2222-222222222222")
+                target_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, "merchant2@paytm.demo")
+            else:
+                target_user_id = MERCHANT_USER_ID
 
     # Fetch user from DB if session exists
     if session:
         user_stmt = select(User).where(User.id == target_user_id)
         user = (await session.execute(user_stmt)).scalar_one_or_none()
+        if user and (not user.is_active or user.role.upper() != role):
+            raise UnauthorizedError("Session user is inactive or has a different role")
         if not user:
             user = User(
                 id=target_user_id,
@@ -87,8 +91,7 @@ def require_role(*allowed_roles: str) -> Callable[..., Any]:
     """Enforce endpoint role authorization (RBAC)."""
 
     async def _role_checker(auth: Annotated[AuthContext, Depends(get_auth_context)]) -> AuthContext:
-        normalized_allowed = [r.upper() for r in allowed_roles]
-        if auth.role.upper() not in normalized_allowed:
+        if not is_role_allowed(auth.role, allowed_roles):
             raise ForbiddenError(
                 f"Action forbidden for role '{auth.role}'. Required roles: {list(allowed_roles)}"
             )
