@@ -17,11 +17,7 @@ async def health_check() -> dict:
             "llm_provider": settings.LLM_PROVIDER,
             "voice_provider": settings.VOICE_PROVIDER,
             "settlement_ops_adapter": settings.SETTLEMENT_OPS_ADAPTER,
-            "services": {
-                "api": "up",
-                "database": "configured",
-                "verifier_role": "configured"
-            }
+            "services": {"api": "up", "database": "configured", "verifier_role": "configured"},
         },
-        source_type="SYSTEM"
+        source_type="SYSTEM",
     )
