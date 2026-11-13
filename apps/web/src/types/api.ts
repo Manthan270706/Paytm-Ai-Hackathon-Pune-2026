@@ -89,4 +89,8 @@ export interface DiscrepancySummary {
   discrepancy: string
   reason_code: string
   source_type: SourceType
+  records_checked?: string[]
+  calculation_trace?: Record<string, any>
+  limitations?: string
+  next_action?: string
 }

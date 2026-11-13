@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FC, KeyboardEvent } from 'react'
 import { ChatMessage, DiscrepancySummary } from '../types/api'
-import { SourceBadge } from './SourceBadge'
+import { EvidencePanel } from './EvidencePanel'
 import {
   Send,
   Mic,
@@ -9,7 +9,6 @@ import {
   Terminal,
   Bot,
   User,
-  Info,
 } from 'lucide-react'
 
 interface ChatWorkspaceProps {
@@ -136,42 +135,14 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                     {msg.content}
                   </div>
 
-                  {/* Evidence Card on assistant message if discrepancy available */}
+                  {/* Evidence & Investigation Panel on assistant message if available */}
                   {!isUser && evidenceSummary && (
-                    <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5 text-xs font-mono">
-                      <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-slate-800">
-                        <span className="text-slate-400 font-sans font-bold flex items-center gap-1.5">
-                          <Info className="h-3.5 w-3.5 text-sky-400" />
-                          Reconciliation Evidence
-                        </span>
-                        <SourceBadge source={evidenceSummary.source_type} size="sm" />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>
-                          <span className="text-slate-500 block">Expected Net:</span>
-                          <span className="font-bold text-white">₹{evidenceSummary.expected_net}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Observed Net:</span>
-                          <span className="font-bold text-slate-300">₹{evidenceSummary.observed_net}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Discrepancy:</span>
-                          <span className="font-bold text-amber-400">₹{evidenceSummary.discrepancy}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">SLA Reason Code:</span>
-                          <span className="font-bold text-rose-400">{evidenceSummary.reason_code}</span>
-                        </div>
-                      </div>
-
-                      {activeCaseId && (
-                        <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
-                          <span className="text-slate-400 font-sans">Active Case:</span>
-                          <span className="text-sky-400 font-bold">#{activeCaseId.slice(0, 8)}</span>
-                        </div>
-                      )}
+                    <div className="pt-1">
+                      <EvidencePanel
+                        evidence={evidenceSummary}
+                        activeCaseId={activeCaseId}
+                        onOpenTrace={onToggleTrace}
+                      />
                     </div>
                   )}
                 </div>

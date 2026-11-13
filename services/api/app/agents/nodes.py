@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from app.agents.state import AgentState
 from app.agents.wrapper import ToolExecutionWrapper
 from app.core.redaction import redact
-from app.db.models import SupportCase
+from app.domain.policy import evaluate as evaluate_policy_domain
 from app.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -318,24 +318,23 @@ async def evaluate_policy(
 ) -> dict[str, Any]:
     """Node: checks policy rules (PRD §11).
 
-    If settlement re-sync discrepancy > ₹5,000, returns REQUIRE_APPROVAL.
+    If settlement re-sync discrepancy > ₹5,000, returns REQUIRE_HUMAN_APPROVAL.
     """
     recon = state.get("reconciliation_summary", {})
     discrepancy_str = recon.get("discrepancy", "0.00")
     discrepancy = Decimal(discrepancy_str)
-    threshold = Decimal("5000.00")
 
-    if discrepancy > threshold:
-        decision = "REQUIRE_APPROVAL"
-        reason = f"Discrepancy ₹{discrepancy} exceeds auto-resync limit of ₹{threshold}"
-    else:
-        decision = "ALLOW"
-        reason = "Within automated re-sync limit"
+    policy_res = evaluate_policy_domain(
+        "REQUEST_SETTLEMENT_RESYNC",
+        {"discrepancy": discrepancy},
+    )
+    decision = policy_res.decision
+    reason = policy_res.reason_code
 
     policy_eval = {
         "decision": decision,
         "reason": reason,
-        "threshold": str(threshold),
+        "discrepancy": str(discrepancy),
     }
 
     return {
@@ -353,20 +352,34 @@ async def evaluate_policy(
 
 
 async def execute_tool(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
-    """Node: executes permitted actions (e.g., support case creation)."""
+    """Node: executes permitted actions: case creation, assignment, approval or re-sync."""
     configurable = (config or {}).get("configurable", {})
     session = configurable.get("session")
     wrapper = ToolExecutionWrapper(session)
     merchant_id = state["merchant_id"]
     ctx = ToolContext(merchant_id=merchant_id, session=session)
 
-    # 1. create_support_case
+    recon = state.get("reconciliation_summary", {})
+    discrepancy_str = recon.get("discrepancy", "6000.00")
+    discrepancy = Decimal(discrepancy_str)
+    inv_data = state.get("investigation_data", {})
+    records_checked = recon.get("source_ids", inv_data.get("transaction_ids", []))
+
+    # Stable idempotency key per merchant complaint
+    idemp_key = f"IDEMP-CASE-{merchant_id}-{discrepancy_str}"
+
+    # 1. create_support_case (exactly one case per complaint)
     out_case, trace_case = await wrapper.execute_tool(
         tool_name="create_support_case",
         raw_input={
             "category": state.get("intent", "SETTLEMENT_MISMATCH"),
-            "summary": "Settlement mismatch: missing ₹6,000 from batch BATCH_01",
-            "idempotency_key": f"CASE-{uuid.uuid4().hex[:12]}",
+            "summary": (
+                f"Settlement mismatch: missing ₹{discrepancy_str} "
+                f"({recon.get('reason_code', 'OVERDUE')})"
+            ),
+            "priority": "P1",
+            "evidence_record_ids": [str(r) for r in records_checked],
+            "idempotency_key": idemp_key,
         },
         tool_context=ctx,
         agent_run_id=state["run_id"],
@@ -384,40 +397,63 @@ async def execute_tool(state: AgentState, config: RunnableConfig | None = None) 
     else:
         case_id = uuid.uuid4()
 
-    if session is not None:
-        new_case = SupportCase(
-            id=case_id,
-            merchant_id=merchant_id,
-            case_number=f"CASE-{uuid.uuid4().hex[:8].upper()}",
-            category=state.get("intent", "SETTLEMENT_MISMATCH"),
-            priority="P1",
-            status="AWAITING_APPROVAL",
-            queue="SETTLEMENT_OPS",
-            summary="Settlement mismatch: missing ₹6,000 from batch BATCH_01",
-            idempotency_key=f"CASE-{uuid.uuid4().hex[:12]}",
-            version=1,
-        )
-        session.add(new_case)
-        await session.flush()
-
-    # 2. request_approval (storing case version and action hash)
-    _, trace_appr = await wrapper.execute_tool(
-        tool_name="request_approval",
+    # 2. assign_case to Settlement Operations
+    _, trace_assign = await wrapper.execute_tool(
+        tool_name="assign_case",
         raw_input={
             "case_id": str(case_id),
-            "action": "SETTLEMENT_RESYNC",
-            "case_version": 1,
-            "evidence": state.get("reconciliation_summary", {}),
+            "queue": "SETTLEMENT_OPS",
+            "reason": f"Discrepancy ₹{discrepancy_str} requires settlement ops handling",
         },
         tool_context=ctx,
         agent_run_id=state["run_id"],
     )
 
+    policy_eval = state.get("policy_evaluation", {})
+    traces = [trace_case, trace_assign]
+    action_hash = None
+    case_version = 1
+
+    # 3. Policy routing: above threshold requires approval;
+    # within threshold requests re-sync directly
+    needs_approval = (
+        policy_eval.get("decision") in {"REQUIRE_HUMAN_APPROVAL", "REQUIRE_APPROVAL"}
+        or discrepancy > Decimal("5000.00")
+    )
+    if needs_approval:
+        out_appr, trace_appr = await wrapper.execute_tool(
+            tool_name="request_approval",
+            raw_input={
+                "case_id": str(case_id),
+                "action": "SETTLEMENT_RESYNC",
+                "amount": discrepancy,
+                "evidence": recon,
+            },
+            tool_context=ctx,
+            agent_run_id=state["run_id"],
+        )
+        traces.append(trace_appr)
+        action_hash = getattr(out_appr, "action_hash", "hash_resync")
+        case_version = getattr(out_appr, "case_version", 1)
+    else:
+        out_resync, trace_resync = await wrapper.execute_tool(
+            tool_name="request_settlement_resync",
+            raw_input={
+                "case_id": str(case_id),
+                "batch_ref": "BATCH_20261112_01",
+                "amount": discrepancy,
+                "idempotency_key": f"RESYNC-{case_id}",
+            },
+            tool_context=ctx,
+            agent_run_id=state["run_id"],
+        )
+        traces.append(trace_resync)
+
     return {
         "active_case_id": case_id,
-        "case_version": 1,
-        "action_hash": "hash_resync_batch_01",
-        "trace_events": state.get("trace_events", []) + [trace_case, trace_appr],
+        "case_version": case_version,
+        "action_hash": action_hash,
+        "trace_events": state.get("trace_events", []) + traces,
     }
 
 
