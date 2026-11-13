@@ -59,3 +59,12 @@ class RateLimitError(OpsSaathiError):
         self, message: str = "Too many requests. Please slow down.", details: Any | None = None
     ) -> None:
         super().__init__(message=message, code="RATE_LIMITED", details=details)
+
+
+class ServiceUnavailableError(OpsSaathiError):
+    """Raised when an external service or database is unavailable."""
+
+    def __init__(
+        self, message: str = "Service unavailable", details: Any | None = None
+    ) -> None:
+        super().__init__(message=message, code="SERVICE_UNAVAILABLE", details=details)

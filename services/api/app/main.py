@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError, OperationalError
 from starlette.responses import Response
 
 from app.api.v1.agent import router as agent_router
@@ -26,6 +27,7 @@ from app.core.exceptions import (
     NotFoundError,
     OpsSaathiError,
     RateLimitError,
+    ServiceUnavailableError,
     UnauthorizedError,
     ValidationError,
 )
@@ -172,6 +174,52 @@ async def pydantic_validation_handler(
             code="VALIDATION_ERROR",
             message="Request body or query parameter validation failed.",
             details=exc.errors(),
+            request_id=req_id,
+        ),
+    )
+
+
+@app.exception_handler(ServiceUnavailableError)
+async def service_unavailable_handler(
+    request: Request, exc: ServiceUnavailableError
+) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=503,
+        content=error_response(
+            code="SERVICE_UNAVAILABLE",
+            message=exc.message,
+            details=exc.details,
+            request_id=req_id,
+        ),
+    )
+
+
+@app.exception_handler(OperationalError)
+async def db_operational_error_handler(
+    request: Request, exc: OperationalError
+) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=503,
+        content=error_response(
+            code="SERVICE_UNAVAILABLE",
+            message="Database unavailable. Request could not be acknowledged or processed.",
+            details={"service": "database"},
+            request_id=req_id,
+        ),
+    )
+
+
+@app.exception_handler(DBAPIError)
+async def db_api_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=503,
+        content=error_response(
+            code="SERVICE_UNAVAILABLE",
+            message="Database connection error. Request could not be acknowledged or processed.",
+            details={"service": "database"},
             request_id=req_id,
         ),
     )
