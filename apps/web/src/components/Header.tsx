@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { UserRole } from '../types/api'
-import { Languages, Shield, User, RotateCcw } from 'lucide-react'
+import { Languages, Shield, User, RotateCcw, Activity } from 'lucide-react'
 
 interface HeaderProps {
   currentRole: UserRole
@@ -10,6 +10,7 @@ interface HeaderProps {
   onResetDemo: () => void
   isResetting: boolean
   isReplayMode?: boolean
+  onOpenHealth?: () => void
 }
 
 export const Header: FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: FC<HeaderProps> = ({
   onResetDemo,
   isResetting,
   isReplayMode = false,
+  onOpenHealth,
 }) => {
   return (
     <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
@@ -75,6 +77,18 @@ export const Header: FC<HeaderProps> = ({
             <RotateCcw className={`h-3.5 w-3.5 ${isResetting ? 'animate-spin' : ''}`} />
             <span>{isResetting ? 'Resetting...' : 'Reset Demo'}</span>
           </button>
+
+          {/* Integration Health Button */}
+          {onOpenHealth && (
+            <button
+              onClick={onOpenHealth}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700/80 text-cyan-400 border border-cyan-500/30 rounded-lg px-3 py-1.5 text-xs font-medium transition shadow-sm"
+              title="View active provider adapters and integration health"
+            >
+              <Activity className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Health</span>
+            </button>
+          )}
 
           {/* Role Toggle / Demo Login */}
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
