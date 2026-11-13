@@ -21,6 +21,9 @@ export const SourceBadge: FC<SourceBadgeProps> = ({
   } else if (source === 'SYNTHETIC_DEMO') {
     badgeStyle = 'bg-amber-950/80 text-amber-400 border-amber-800/80 shadow-amber-950/20'
     label = 'SYNTHETIC DEMO'
+  } else if (source === 'INTEGRATION_UNAVAILABLE' || source === 'UNAVAILABLE') {
+    badgeStyle = 'bg-rose-950/80 text-rose-400 border-rose-800/80 shadow-rose-950/20'
+    label = 'INTEGRATION UNAVAILABLE'
   } else if (source === 'MOCK' || source === 'MOCK_SETTLEMENT_OPS') {
     badgeStyle = 'bg-purple-950/80 text-purple-400 border-purple-800/80 shadow-purple-950/20'
     label = 'MOCK ADAPTER'
