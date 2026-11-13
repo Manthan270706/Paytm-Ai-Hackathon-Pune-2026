@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: guard-checks
+        name: OpsSaathi Safety & Integrity Guard
+        entry: python scripts/guard.py
+        language: system
+        pass_filenames: false
+        always_run: true
