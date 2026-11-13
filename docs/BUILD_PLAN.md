@@ -506,7 +506,7 @@ P6 (rehearsal and finale)
 - [ ] P3-A1 to P3-A5 done, **Gate 3**
 - [x] P4-A1 to P4-A9 and P4-C1 done, **Gate 4**
 - [x] P5-C1, P5-A1, P5-A2, P5-C2, fixes, P5-A4 done, **Gate 5 (freeze)**
-- [ ] P6 rehearsal complete, backups ready
+- [x] P6 rehearsal complete, backups ready
 
 ## 8. If you fall behind
 
