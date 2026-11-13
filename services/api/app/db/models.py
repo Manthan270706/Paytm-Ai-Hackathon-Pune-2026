@@ -135,6 +135,8 @@ class FeeRule(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
+    merchant: Mapped["Merchant"] = relationship("Merchant")
+
 
 class SettlementBatch(Base):
     __tablename__ = "settlement_batches"

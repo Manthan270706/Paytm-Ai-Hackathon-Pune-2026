@@ -1,13 +1,46 @@
+import os
 import uuid
+from collections.abc import AsyncGenerator
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.db.base import Base
+from app.db.session import AsyncSession, _create_engine, async_sessionmaker, get_db_session
 from app.main import app
+
+TEST_ROUTES_DB = "sqlite+aiosqlite:///./test_routes.db"
+test_engine = _create_engine(TEST_ROUTES_DB, is_verifier=False)
+route_session_factory = async_sessionmaker(
+    bind=test_engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
+async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with route_session_factory() as session:
+        yield session
+
+
+app.dependency_overrides[get_db_session] = override_get_db
+
+
+@pytest.fixture(autouse=True, scope="module")
+async def setup_route_test_db() -> AsyncGenerator[None, None]:
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await test_engine.dispose()
+    if os.path.exists("./test_routes.db"):
+        os.remove("./test_routes.db")
+
 
 client = TestClient(app)
 
 
-def test_auth_routes():
+def test_auth_routes() -> None:
     # Demo login
     login_res = client.post("/api/v1/auth/demo-login", json={"role": "MERCHANT"})
     assert login_res.status_code == 200
@@ -24,7 +57,7 @@ def test_auth_routes():
     assert me_data["data"]["role"] == "MERCHANT"
 
 
-def test_merchant_route():
+def test_merchant_route() -> None:
     merchant_id = uuid.uuid4()
     res = client.get(f"/api/v1/merchants/{merchant_id}")
     assert res.status_code == 200
@@ -34,7 +67,7 @@ def test_merchant_route():
     assert data["data"]["display_name"] == "Ramesh Kirana Store"
 
 
-def test_transaction_routes():
+def test_transaction_routes() -> None:
     # List transactions
     list_res = client.get("/api/v1/transactions")
     assert list_res.status_code == 200
@@ -51,7 +84,7 @@ def test_transaction_routes():
     assert detail_data["data"]["id"] == str(txn_id)
 
 
-def test_settlements_route():
+def test_settlements_route() -> None:
     res = client.get("/api/v1/settlements")
     assert res.status_code == 200
     data = res.json()
@@ -60,7 +93,7 @@ def test_settlements_route():
     assert "discrepancy_amount" in data["data"]
 
 
-def test_agent_message_route():
+def test_agent_message_route() -> None:
     res = client.post(
         "/api/v1/agent/messages",
         json={"message": "My ₹6,000 payment is missing from settlement", "language": "en"},
@@ -72,7 +105,7 @@ def test_agent_message_route():
     assert "evidence_summary" in data["data"]
 
 
-def test_voice_routes():
+def test_voice_routes() -> None:
     # Create voice session
     session_res = client.post("/api/v1/voice/sessions", json={"language": "en"})
     assert session_res.status_code == 200
@@ -94,7 +127,7 @@ def test_voice_routes():
     assert trans_res.json()["ok"] is True
 
 
-def test_case_lifecycle_routes():
+def test_case_lifecycle_routes() -> None:
     # Case creation without Idempotency-Key fails with 400
     bad_create = client.post("/api/v1/cases", json={"summary": "Missing settlement"})
     assert bad_create.status_code == 400
@@ -144,7 +177,12 @@ def test_case_lifecycle_routes():
     assert ver_res.json()["data"]["verifier_role"] == "opssaathi_verifier"
 
 
-def test_demo_and_metrics_routes():
+def test_demo_and_metrics_routes() -> None:
+    # Reset demo (seeds the DB)
+    reset_res = client.post("/api/v1/demo/reset")
+    assert reset_res.status_code == 200
+    assert reset_res.json()["data"]["discrepancy"] == "6000.00"
+
     # Simulate settlement
     sim_res = client.post(
         "/api/v1/demo/simulate-settlement", json={"amount": "6000.00", "batch_ref": "BATCH_01"}
@@ -152,18 +190,13 @@ def test_demo_and_metrics_routes():
     assert sim_res.status_code == 200
     assert sim_res.json()["ok"] is True
 
-    # Reset demo
-    reset_res = client.post("/api/v1/demo/reset")
-    assert reset_res.status_code == 200
-    assert reset_res.json()["data"]["discrepancy"] == "6000.00"
-
     # Metrics
     metrics_res = client.get("/api/v1/metrics")
     assert metrics_res.status_code == 200
     assert metrics_res.json()["data"]["straight_through_processing_rate_percent"] > 0
 
 
-def test_paytm_webhook_route():
+def test_paytm_webhook_route() -> None:
     webhook_res = client.post(
         "/api/v1/webhooks/paytm",
         json={

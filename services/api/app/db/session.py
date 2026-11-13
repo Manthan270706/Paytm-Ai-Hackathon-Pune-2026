@@ -1,3 +1,5 @@
+import asyncio
+import sys
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import event
@@ -10,11 +12,19 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 
 def _create_engine(url: str, is_verifier: bool = False) -> AsyncEngine:
     connect_args: dict = {}
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+    elif "psycopg" in url:
+        connect_args["connect_timeout"] = 2
 
     engine = create_async_engine(
         url,
@@ -71,3 +81,6 @@ async def get_verifier_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+
+get_db_session = get_db
