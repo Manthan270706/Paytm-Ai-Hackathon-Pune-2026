@@ -91,8 +91,9 @@ async def test_golden_run_without_api_key_multilingual_replay() -> None:
     transport = ASGITransport(app=app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
+            support_headers = {"Authorization": "Bearer demo-token-support_agent-1"}
             # 1. English golden run
-            await client.post("/api/v1/demo/reset")
+            await client.post("/api/v1/demo/reset", headers=support_headers)
             en_res = await client.post(
                 "/api/v1/agent/messages",
                 headers={"Authorization": "Bearer demo-token-merchant-1"},
@@ -108,7 +109,7 @@ async def test_golden_run_without_api_key_multilingual_replay() -> None:
             assert en_data["evidence_summary"]["discrepancy"] == "6000.00"
 
             # 2. Hindi golden run
-            await client.post("/api/v1/demo/reset")
+            await client.post("/api/v1/demo/reset", headers=support_headers)
             hi_res = await client.post(
                 "/api/v1/agent/messages",
                 headers={"Authorization": "Bearer demo-token-merchant-1"},
@@ -124,7 +125,7 @@ async def test_golden_run_without_api_key_multilingual_replay() -> None:
             assert hi_data["evidence_summary"]["discrepancy"] == "6000.00"
 
             # 3. Marathi golden run
-            await client.post("/api/v1/demo/reset")
+            await client.post("/api/v1/demo/reset", headers=support_headers)
             mr_res = await client.post(
                 "/api/v1/agent/messages",
                 headers={"Authorization": "Bearer demo-token-merchant-1"},

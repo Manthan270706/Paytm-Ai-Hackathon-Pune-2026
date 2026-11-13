@@ -29,7 +29,10 @@ async def test_metrics_computed_from_case_events_and_baseline() -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Initial call before session cases
-        res = await client.get("/api/v1/metrics")
+        res = await client.get(
+            "/api/v1/metrics",
+            headers={"Authorization": "Bearer demo-token-merchant-1"},
+        )
         assert res.status_code == 200
         data = res.json()["data"]
         assert data["straight_through_processing_rate_percent"] > 0

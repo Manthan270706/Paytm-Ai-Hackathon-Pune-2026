@@ -13,6 +13,7 @@ def test_400_validation_error() -> None:
     # 1. Missing Idempotency-Key header returns 400
     res = client.post(
         "/api/v1/cases",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
         json={"category": "PAYOUT_DELAY", "summary": "Missing payout"},
     )
     assert res.status_code == 400
@@ -24,7 +25,10 @@ def test_400_validation_error() -> None:
     # 2. Invalid schema (missing required summary) returns 400
     res_bad_body = client.post(
         "/api/v1/cases",
-        headers={"Idempotency-Key": f"IDEMP-{uuid.uuid4()}"},
+        headers={
+            "Authorization": "Bearer demo-token-merchant-1",
+            "Idempotency-Key": f"IDEMP-{uuid.uuid4()}",
+        },
         json={"category": "PAYOUT_DELAY"},
     )
     assert res_bad_body.status_code == 400

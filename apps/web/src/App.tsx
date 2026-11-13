@@ -383,7 +383,12 @@ export default function App() {
   const handleResetDemo = async () => {
     try {
       setIsResetting(true)
-      const res = await fetch(`${API_BASE}/demo/reset`, { method: 'POST' })
+      const res = await fetch(`${API_BASE}/demo/reset`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer demo-token-support_agent-1',
+        },
+      })
       if (res.ok) {
         setMessages([])
         setTraceEvents([])
@@ -408,7 +413,10 @@ export default function App() {
       setIsSimulating(true)
       const res = await fetch(`${API_BASE}/demo/simulate-settlement`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer demo-token-support_agent-1',
+        },
         body: JSON.stringify({ amount: '6000.00', batch_ref: 'BATCH_20261112_01' }),
       })
       if (res.ok) {

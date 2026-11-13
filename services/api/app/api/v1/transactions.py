@@ -1,6 +1,4 @@
 import uuid
-from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -40,26 +38,6 @@ async def list_transactions(
         query = query.limit(limit)
         txns = list((await session.execute(query)).scalars().all())
 
-    if not txns:
-        # Fallback seeded demo items if DB unseeded
-        items = [
-            TransactionItemResponse(
-                id=uuid.uuid4(),
-                merchant_id=auth.active_merchant_id,
-                provider="PAYTM",
-                provider_txn_id="TXN_78456321",
-                order_id="ORD_20261112_01",
-                amount=Decimal("6000.00"),
-                currency="INR",
-                status="SUCCESS",
-                txn_time=datetime.now(UTC),
-                source_type="SYNTHETIC_DEMO",
-            ).model_dump()
-        ]
-        return success_response(
-            data={"items": items, "total": len(items)}, source_type="SYNTHETIC_DEMO"
-        )
-
     items = [
         TransactionItemResponse(
             id=t.id,
@@ -95,31 +73,7 @@ async def get_transaction(
     txn = (await session.execute(query)).scalar_one_or_none()
 
     if not txn:
-        # Check if transaction exists for another merchant (IDOR test returns 404)
-        exists_elsewhere = (
-            await session.execute(select(Transaction.id).where(Transaction.id == transaction_id))
-        ).scalar_one_or_none()
-        if exists_elsewhere:
-            raise NotFoundError(f"Transaction {transaction_id} not found in merchant scope")
-
-        # Fallback detail for synthetic tests
-        return success_response(
-            data=TransactionDetailResponse(
-                id=transaction_id,
-                merchant_id=auth.active_merchant_id,
-                provider="PAYTM",
-                provider_txn_id="TXN_78456321",
-                order_id="ORD_20261112_01",
-                amount=Decimal("6000.00"),
-                currency="INR",
-                status="SUCCESS",
-                txn_time=datetime.now(UTC),
-                source_type="SYNTHETIC_DEMO",
-                settlement_status="UNSETTLED",
-                settlement_batch_ref="BATCH_20261112_01",
-            ).model_dump(),
-            source_type="SYNTHETIC_DEMO",
-        )
+        raise NotFoundError(f"Transaction {transaction_id} not found")
 
     # Check if settled
     entry_stmt = select(SettlementEntry).where(SettlementEntry.transaction_id == txn.id)

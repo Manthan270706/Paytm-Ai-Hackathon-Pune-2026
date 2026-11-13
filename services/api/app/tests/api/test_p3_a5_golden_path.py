@@ -7,7 +7,10 @@ client = TestClient(app)
 
 def test_golden_path_end_to_end() -> None:
     # 1. Reset demo environment to frozen baseline
-    reset_res = client.post("/api/v1/demo/reset")
+    reset_res = client.post(
+        "/api/v1/demo/reset",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
     assert reset_res.status_code == 200
     assert reset_res.json()["ok"] is True
     assert reset_res.json()["data"]["discrepancy"] == "6000.00"
@@ -89,7 +92,10 @@ def test_golden_path_end_to_end() -> None:
     assert "verification PASS" in premature_close_res.json()["error"]["message"]
 
     # 8. Early verification check fails while ledger is unchanged
-    early_verify_res = client.post(f"/api/v1/cases/{case_id}/verify")
+    early_verify_res = client.post(
+        f"/api/v1/cases/{case_id}/verify",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
     assert early_verify_res.status_code == 200
     assert early_verify_res.json()["data"]["verification_result"] == "FAIL"
     assert early_verify_res.json()["data"]["status"] == "VERIFYING"
@@ -97,13 +103,17 @@ def test_golden_path_end_to_end() -> None:
     # 9. Simulate bank settlement credit (inserts ₹6,000 SYNTHETIC_DEMO entry)
     sim_res = client.post(
         "/api/v1/demo/simulate-settlement",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
         json={"amount": "6000.00", "batch_ref": "BATCH_20261112_01"},
     )
     assert sim_res.status_code == 200
     assert sim_res.json()["data"]["source_type"] == "SYNTHETIC_DEMO"
 
     # 10. Fresh independent verification succeeds through read-only verifier session
-    verify_res = client.post(f"/api/v1/cases/{case_id}/verify")
+    verify_res = client.post(
+        f"/api/v1/cases/{case_id}/verify",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
     assert verify_res.status_code == 200
     v_data = verify_res.json()["data"]
     assert v_data["verification_result"] == "PASS"

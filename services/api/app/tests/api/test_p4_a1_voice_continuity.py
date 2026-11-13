@@ -127,7 +127,10 @@ async def test_voice_first_complaint_investigation() -> None:
     conv_id = str(uuid.uuid4())
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        await client.post("/api/v1/demo/reset")
+        await client.post(
+            "/api/v1/demo/reset",
+            headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        )
         trans_res = await client.post(
             "/api/v1/voice/transcriptions",
             headers={"Authorization": "Bearer demo-token-merchant-1"},

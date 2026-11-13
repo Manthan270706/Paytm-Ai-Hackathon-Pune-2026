@@ -485,84 +485,74 @@ async def verify_case(
     if auth.role.upper() == "MERCHANT" and case.merchant_id != auth.active_merchant_id:
         raise ForbiddenError("Access to foreign merchant case verification is denied")
 
-    if case.status == "VERIFYING":
-        res = await verify_resolution(
-            case_id=case_id,
-            rule="RECONCILE_DISCREPANCY_ZERO",
-            verifier_session=verifier_session,
-            now=now,
+    if case.status != "VERIFYING":
+        raise ConflictError(
+            f"Case {case_id} is in status '{case.status}', but verification requires 'VERIFYING'"
         )
-        if res.status == "PASS":
-            case.verification_status = "PASS"
-            trans = transition(
-                case=case,
-                to_status="RESOLVED",
-                expected_version=case.version,
-                actor="opssaathi_verifier",
-            )
-            case.status = trans.new_status
-            case.version = trans.new_version
-            ver_event = CaseEvent(
-                id=uuid.uuid4(),
-                case_id=case.id,
-                actor="opssaathi_verifier",
-                event_type="VERIFICATION_COMPLETED",
-                from_status="VERIFYING",
-                to_status="RESOLVED",
-                visibility="MERCHANT",
-                payload={
-                    "verification_result": "PASS",
-                    "before_discrepancy": str(res.before),
-                    "after_discrepancy": str(res.after),
-                    "verifier_role": "opssaathi_verifier",
-                },
-                created_at=now,
-            )
-            session.add(ver_event)
-            await session.commit()
-        else:
-            ver_event = CaseEvent(
-                id=uuid.uuid4(),
-                case_id=case.id,
-                actor="opssaathi_verifier",
-                event_type="VERIFICATION_FAILED",
-                from_status="VERIFYING",
-                to_status="VERIFYING",
-                visibility="INTERNAL",
-                payload={
-                    "verification_result": "FAIL",
-                    "before_discrepancy": str(res.before),
-                    "after_discrepancy": str(res.after),
-                    "verifier_role": "opssaathi_verifier",
-                },
-                created_at=now,
-            )
-            session.add(ver_event)
-            await session.commit()
 
-        return success_response(
-            data=CaseVerifyResponse(
-                case_id=case_id,
-                status=case.status,
-                verification_result=res.status,
-                before_observed=Decimal("15000.00") - res.before,
-                after_observed=Decimal("15000.00") - res.after,
-                expected_net=Decimal("15000.00"),
-                evidence_timestamp=res.evidence_timestamp,
-                verifier_role="opssaathi_verifier",
-            ).model_dump(),
-            source_type="SYNTHETIC_DEMO",
+    res = await verify_resolution(
+        case_id=case_id,
+        rule="RECONCILE_DISCREPANCY_ZERO",
+        verifier_session=verifier_session,
+        now=now,
+    )
+    if res.status == "PASS":
+        case.verification_status = "PASS"
+        trans = transition(
+            case=case,
+            to_status="RESOLVED",
+            expected_version=case.version,
+            actor="opssaathi_verifier",
         )
+        case.status = trans.new_status
+        case.version = trans.new_version
+        ver_event = CaseEvent(
+            id=uuid.uuid4(),
+            case_id=case.id,
+            actor="opssaathi_verifier",
+            event_type="VERIFICATION_COMPLETED",
+            from_status="VERIFYING",
+            to_status="RESOLVED",
+            visibility="MERCHANT",
+            payload={
+                "verification_result": "PASS",
+                "before_discrepancy": str(res.before),
+                "after_discrepancy": str(res.after),
+                "verifier_role": "opssaathi_verifier",
+            },
+            created_at=now,
+        )
+        session.add(ver_event)
+        await session.commit()
+    else:
+        ver_event = CaseEvent(
+            id=uuid.uuid4(),
+            case_id=case.id,
+            actor="opssaathi_verifier",
+            event_type="VERIFICATION_FAILED",
+            from_status="VERIFYING",
+            to_status="VERIFYING",
+            visibility="INTERNAL",
+            payload={
+                "verification_result": "FAIL",
+                "before_discrepancy": str(res.before),
+                "after_discrepancy": str(res.after),
+                "verifier_role": "opssaathi_verifier",
+            },
+            created_at=now,
+        )
+        session.add(ver_event)
+        await session.commit()
 
     return success_response(
         data=CaseVerifyResponse(
             case_id=case_id,
-            status="RESOLVED",
-            verification_result="PASS",
-            before_observed=Decimal("9000.00"),
-            after_observed=Decimal("15000.00"),
+            status=case.status,
+            verification_result=res.status,
+            before_observed=Decimal("15000.00") - res.before,
+            after_observed=Decimal("15000.00") - res.after,
             expected_net=Decimal("15000.00"),
-            evidence_timestamp=now,
+            evidence_timestamp=res.evidence_timestamp,
             verifier_role="opssaathi_verifier",
         ).model_dump(),
         source_type="SYNTHETIC_DEMO",

@@ -4,8 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from app.agents.nodes import detect_language, redact_sensitive
+from app.agents.nodes import detect_language
 from app.agents.wrapper import ToolExecutionWrapper, attempt_pydantic_repair
+from app.core.redaction import redact
 from app.main import app
 from app.tools.registry import ToolContext
 
@@ -15,11 +16,12 @@ client = TestClient(app)
 def test_redact_sensitive_masks_tokens() -> None:
     # 16-digit card number and OTP
     sample = "My card is 4111 2222 3333 4444 and my otp is 123456"
-    redacted = redact_sensitive(sample)
+    res = redact(sample)
+    redacted = res.clean_text
     assert "4111" not in redacted
     assert "123456" not in redacted
-    assert "[CARD_REDACTED]" in redacted
-    assert "[SENSITIVE_REDACTED]" in redacted
+    assert "[REDACTED_CARD]" in redacted
+    assert "[REDACTED_OTP]" in redacted
 
 
 def test_detect_language() -> None:

@@ -50,7 +50,7 @@ def test_transaction_routes() -> None:
     assert len(data["data"]["items"]) >= 1
 
     # Get transaction detail
-    txn_id = uuid.uuid4()
+    txn_id = data["data"]["items"][0]["id"]
     detail_res = client.get(
         f"/api/v1/transactions/{txn_id}",
         headers={"Authorization": "Bearer demo-token-merchant-1"},
@@ -58,6 +58,13 @@ def test_transaction_routes() -> None:
     assert detail_res.status_code == 200
     detail_data = detail_res.json()
     assert detail_data["ok"] is True
+
+    # Unknown transaction ID returns 404
+    unknown_res = client.get(
+        f"/api/v1/transactions/{uuid.uuid4()}",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
+    assert unknown_res.status_code == 404
 
 
 def test_settlements_route() -> None:
@@ -75,6 +82,7 @@ def test_settlements_route() -> None:
 def test_agent_message_route() -> None:
     res = client.post(
         "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
         json={"message": "My ₹6,000 payment is missing from settlement", "language": "en"},
     )
     assert res.status_code == 200
@@ -86,7 +94,11 @@ def test_agent_message_route() -> None:
 
 def test_voice_routes() -> None:
     # Create voice session
-    session_res = client.post("/api/v1/voice/sessions", json={"language": "en"})
+    session_res = client.post(
+        "/api/v1/voice/sessions",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={"language": "en"},
+    )
     assert session_res.status_code == 200
     s_data = session_res.json()
     assert s_data["ok"] is True
@@ -96,6 +108,7 @@ def test_voice_routes() -> None:
     conv_id = uuid.uuid4()
     trans_res = client.post(
         "/api/v1/voice/transcriptions",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
         json={
             "conversation_id": str(conv_id),
             "transcript": "Check my settlement",
@@ -108,7 +121,11 @@ def test_voice_routes() -> None:
 
 def test_case_lifecycle_routes() -> None:
     # Case creation without Idempotency-Key fails with 400
-    bad_create = client.post("/api/v1/cases", json={"summary": "Missing settlement"})
+    bad_create = client.post(
+        "/api/v1/cases",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={"summary": "Missing settlement"},
+    )
     assert bad_create.status_code == 400
 
     # Case creation with Idempotency-Key succeeds
@@ -203,11 +220,13 @@ def test_case_lifecycle_routes() -> None:
     assert rej_res.status_code == 200
     assert rej_res.json()["data"]["status"] == "REJECTED"
 
-    # Verify case
-    ver_res = client.post(f"/api/v1/cases/{case_id}/verify")
-    assert ver_res.status_code == 200
-    assert ver_res.json()["data"]["verification_result"] == "PASS"
-    assert ver_res.json()["data"]["verifier_role"] == "opssaathi_verifier"
+    # Verify case rejects with 409 CONFLICT because status is REJECTED (not VERIFYING)
+    ver_res = client.post(
+        f"/api/v1/cases/{case_id}/verify",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
+    assert ver_res.status_code == 409
+    assert ver_res.json()["error"]["code"] == "CONFLICT"
 
     # Premature resolution attempt without verification PASS is blocked (403)
     premature_res = client.post(
@@ -226,19 +245,27 @@ def test_case_lifecycle_routes() -> None:
 
 def test_demo_and_metrics_routes() -> None:
     # Reset demo
-    reset_res = client.post("/api/v1/demo/reset")
+    reset_res = client.post(
+        "/api/v1/demo/reset",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
     assert reset_res.status_code == 200
     assert reset_res.json()["data"]["discrepancy"] == "6000.00"
 
     # Simulate settlement
     sim_res = client.post(
-        "/api/v1/demo/simulate-settlement", json={"amount": "6000.00", "batch_ref": "BATCH_01"}
+        "/api/v1/demo/simulate-settlement",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        json={"amount": "6000.00", "batch_ref": "BATCH_01"},
     )
     assert sim_res.status_code == 200
     assert sim_res.json()["ok"] is True
 
     # Metrics
-    metrics_res = client.get("/api/v1/metrics")
+    metrics_res = client.get(
+        "/api/v1/metrics",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
     assert metrics_res.status_code == 200
     assert metrics_res.json()["data"]["straight_through_processing_rate_percent"] > 0
 

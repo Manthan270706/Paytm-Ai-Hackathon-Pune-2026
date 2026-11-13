@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import agent_graph
-from app.agents.nodes import redact_sensitive
 from app.agents.state import AgentState
+from app.core.redaction import redact
 from app.db.models import AgentRun, Conversation, Message
 
 logger = logging.getLogger(__name__)
@@ -50,8 +50,8 @@ async def run_agent_turn(
         session.add(conv)
         await session.flush()
 
-    # 2. Record user message (redacting sensitive PIN/OTP before DB insertion)
-    sanitized_text = redact_sensitive(message)
+    # 2. Record user message (redacting sensitive credentials via core.redaction.redact)
+    sanitized_text = redact(message).clean_text
     user_msg = Message(
         id=uuid.uuid4(),
         conversation_id=conv.id,

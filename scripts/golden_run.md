@@ -22,8 +22,8 @@ This runbook defines the exact step-by-step end-to-end execution path for judgin
 ## 2. Step-by-Step Golden Run
 
 ### Step 1: Deterministic Reset & Seed
-- **Action**: Call demo reset endpoint or execute CLI seed.
-  - API: `POST /api/v1/demo/reset`
+- **Action**: Call demo reset endpoint (support role) or execute CLI seed.
+  - API: `POST /api/v1/demo/reset` with header `Authorization: Bearer demo-token-support_agent-1`
   - CLI: `python scripts/seed_demo.py --sqlite`
 - **Expected Result**:
   - HTTP `200 OK`
@@ -92,16 +92,16 @@ This runbook defines the exact step-by-step end-to-end execution path for judgin
   - Request rejected with HTTP `403 FORBIDDEN` or policy error: *"Case cannot be resolved without verification PASS."*
 
 ### Step 7: Simulate Bank Settlement
-- **Action**: Simulate bank-side credit to batch.
-  - API: `POST /api/v1/demo/simulate-settlement`
+- **Action**: Simulate bank-side credit to batch (requires support role).
+  - API: `POST /api/v1/demo/simulate-settlement` with header `Authorization: Bearer demo-token-support_agent-1`
 - **Expected Result**:
   - Missing ₹6,000 entry inserted as `SYNTHETIC_DEMO`.
   - Batch net updated to ₹15,000.00.
   - Audit trail records `SIMULATE_BANK_SETTLEMENT`.
 
 ### Step 8: Independent Read-Only Verification
-- **Action**: Run verification engine.
-  - API: `POST /api/v1/cases/{case_id}/verify`
+- **Action**: Run verification engine (requires authenticated session).
+  - API: `POST /api/v1/cases/{case_id}/verify` with header `Authorization: Bearer demo-token-support_agent-1`
 - **Expected Result**:
   - Query executes strictly through `opssaathi_verifier` role (SELECT-only).
   - Before: Discrepancy ₹6,000.00

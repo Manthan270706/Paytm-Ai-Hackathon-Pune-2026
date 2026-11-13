@@ -25,6 +25,11 @@ def auth_headers() -> dict[str, str]:
     return {"Authorization": "Bearer demo-token-merchant-1"}
 
 
+@pytest.fixture
+def support_headers() -> dict[str, str]:
+    return {"Authorization": "Bearer demo-token-support_agent-1"}
+
+
 async def test_detect_language_and_devanagari_normalization() -> None:
     """Verify script and marker-based language detection and digit normalization."""
     # 1. English
@@ -83,12 +88,13 @@ async def test_templates_preserve_numbers_and_ids() -> None:
 
 async def test_conversation_stores_detected_language(
     auth_headers: dict[str, str],
+    support_headers: dict[str, str],
 ) -> None:
     """Verify that detected language is stored directly on Conversation in PostgreSQL."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Reset DB first
-        await client.post("/api/v1/demo/reset", headers=auth_headers)
+        await client.post("/api/v1/demo/reset", headers=support_headers)
 
         # 1. Hindi message
         res_hi = await client.post(
@@ -128,12 +134,13 @@ async def test_conversation_stores_detected_language(
 
 async def test_acceptance_same_case_answered_in_en_hi_mr_shows_identical_numbers(
     auth_headers: dict[str, str],
+    support_headers: dict[str, str],
 ) -> None:
     """Acceptance: the same case answered in English, Hindi, and Marathi shows identical numbers."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Reset DB to ensure fresh frozen scenario
-        await client.post("/api/v1/demo/reset", headers=auth_headers)
+        await client.post("/api/v1/demo/reset", headers=support_headers)
 
         # 1. English run
         res_en = await client.post(

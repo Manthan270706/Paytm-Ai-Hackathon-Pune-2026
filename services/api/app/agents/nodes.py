@@ -24,16 +24,7 @@ from app.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
 
-# Patterns for sensitive data redaction (PRD Trust Rule 9)
-CARD_PATTERN = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
-OTP_PATTERN = re.compile(r"\b(otp|code|pin|cvv)\s*(?:is|[:=])?\s*\d{3,6}\b", re.IGNORECASE)
 
-
-def redact_sensitive(text: str) -> str:
-    """Mask OTP, PIN, CVV and card numbers before any agent processing or logging."""
-    redacted = CARD_PATTERN.sub("[CARD_REDACTED]", text)
-    redacted = OTP_PATTERN.sub(r"\1 [SENSITIVE_REDACTED]", redacted)
-    return redacted
 
 
 
