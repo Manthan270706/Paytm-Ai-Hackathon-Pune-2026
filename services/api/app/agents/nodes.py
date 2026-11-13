@@ -524,19 +524,39 @@ async def communicate(state: AgentState, config: RunnableConfig | None = None) -
             "which is currently awaiting supervisor approval."
         )
 
+    traces: list[dict[str, Any]] = [
+        {
+            "node": "communicate",
+            "status": "SUCCESS",
+            "language": lang,
+        }
+    ]
+
+    configurable = (config or {}).get("configurable", {})
+    session = configurable.get("session")
+    active_case_id = state.get("active_case_id")
+    if session and active_case_id and state.get("merchant_id"):
+        wrapper = ToolExecutionWrapper(session)
+        ctx = ToolContext(merchant_id=state["merchant_id"], session=session)
+        _, trace_comm = await wrapper.execute_tool(
+            tool_name="send_merchant_update",
+            raw_input={
+                "case_id": str(active_case_id),
+                "template": "SETTLEMENT_INVESTIGATION_RESULT",
+                "language": lang,
+                "parameters": {"discrepancy": discrepancy, "reply": reply},
+            },
+            tool_context=ctx,
+            agent_run_id=state["run_id"],
+        )
+        traces.append(trace_comm)
+
     return {
         "final_reply": reply,
         "status": "AWAITING_APPROVAL"
         if policy.get("decision") == "REQUIRE_APPROVAL"
         else "COMPLETED",
-        "trace_events": state.get("trace_events", [])
-        + [
-            {
-                "node": "communicate",
-                "status": "SUCCESS",
-                "language": lang,
-            }
-        ],
+        "trace_events": state.get("trace_events", []) + traces,
     }
 
 

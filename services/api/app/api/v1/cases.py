@@ -17,14 +17,16 @@ from app.api.v1.schemas import (
     CaseEventResponse,
     CaseItemResponse,
     CaseRejectRequest,
+    CaseResolveRequest,
     CaseVerifyResponse,
 )
 from app.core.dependencies import AuthContext, get_auth_context
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.response import success_response
 from app.db.models import Approval, CaseEvent, SupportCase
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_verifier_db
 from app.domain.approvals import validate_resume
+from app.domain.case_lifecycle import transition
 from app.domain.verification import verify_resolution
 
 router = APIRouter()
@@ -342,20 +344,52 @@ async def approve_case_action(
                 action=action_payload,
             )
 
-        case.version += 1
-        case.status = "APPROVED"
-        event = CaseEvent(
-            id=uuid.uuid4(),
-            case_id=case.id,
-            actor=auth.user.email,
-            event_type="APPROVAL_GRANTED",
-            from_status="AWAITING_APPROVAL",
-            to_status="APPROVED",
-            visibility="INTERNAL",
-            payload={"action_hash": req.action_hash},
-        )
-        session.add(event)
-        await session.commit()
+        if approval is not None:
+            case.version += 1
+            case.status = "VERIFYING"
+            appr_event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor=auth.user.email,
+                event_type="APPROVAL_GRANTED",
+                from_status="AWAITING_APPROVAL",
+                to_status="APPROVED",
+                visibility="INTERNAL",
+                payload={"action_hash": req.action_hash},
+            )
+            resync_event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor="OpsSaathi AI",
+                event_type="RESYNC_REQUESTED",
+                from_status="APPROVED",
+                to_status="VERIFYING",
+                visibility="INTERNAL",
+                payload={
+                    "batch_ref": "BATCH_20261112_01",
+                    "discrepancy": "6000.00",
+                    "expected_net": "15000.00",
+                    "observed": "9000.00",
+                    "status": "ACKNOWLEDGED",
+                },
+            )
+            session.add_all([appr_event, resync_event])
+            await session.commit()
+        else:
+            case.version += 1
+            case.status = "APPROVED"
+            event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor=auth.user.email,
+                event_type="APPROVAL_GRANTED",
+                from_status="AWAITING_APPROVAL",
+                to_status="APPROVED",
+                visibility="INTERNAL",
+                payload={"action_hash": req.action_hash},
+            )
+            session.add(event)
+            await session.commit()
 
     return success_response(
         data={
@@ -467,6 +501,7 @@ async def assign_case(
 async def verify_case(
     case_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    verifier_session: Annotated[AsyncSession, Depends(get_verifier_db)],
 ) -> dict:
     now = datetime.now(UTC)
     stmt = select(SupportCase).where(SupportCase.id == case_id)
@@ -476,13 +511,61 @@ async def verify_case(
         res = await verify_resolution(
             case_id=case_id,
             rule="RECONCILE_DISCREPANCY_ZERO",
-            verifier_session=session,
+            verifier_session=verifier_session,
             now=now,
         )
+        if res.status == "PASS":
+            case.verification_status = "PASS"
+            trans = transition(
+                case=case,
+                to_status="RESOLVED",
+                expected_version=case.version,
+                actor="opssaathi_verifier",
+            )
+            case.status = trans.new_status
+            case.version = trans.new_version
+            ver_event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor="opssaathi_verifier",
+                event_type="VERIFICATION_COMPLETED",
+                from_status="VERIFYING",
+                to_status="RESOLVED",
+                visibility="MERCHANT",
+                payload={
+                    "verification_result": "PASS",
+                    "before_discrepancy": str(res.before),
+                    "after_discrepancy": str(res.after),
+                    "verifier_role": "opssaathi_verifier",
+                },
+                created_at=now,
+            )
+            session.add(ver_event)
+            await session.commit()
+        else:
+            ver_event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor="opssaathi_verifier",
+                event_type="VERIFICATION_FAILED",
+                from_status="VERIFYING",
+                to_status="VERIFYING",
+                visibility="INTERNAL",
+                payload={
+                    "verification_result": "FAIL",
+                    "before_discrepancy": str(res.before),
+                    "after_discrepancy": str(res.after),
+                    "verifier_role": "opssaathi_verifier",
+                },
+                created_at=now,
+            )
+            session.add(ver_event)
+            await session.commit()
+
         return success_response(
             data=CaseVerifyResponse(
                 case_id=case_id,
-                status="RESOLVED" if res.status == "PASS" else case.status,
+                status=case.status,
                 verification_result=res.status,
                 before_observed=Decimal("15000.00") - res.before,
                 after_observed=Decimal("15000.00") - res.after,
@@ -504,6 +587,59 @@ async def verify_case(
             evidence_timestamp=now,
             verifier_role="opssaathi_verifier",
         ).model_dump(),
+        source_type="SYNTHETIC_DEMO",
+    )
+
+
+@router.post("/cases/{case_id}/resolve", summary="Resolve support case after verification pass")
+async def resolve_case(
+    case_id: uuid.UUID,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    req: CaseResolveRequest | None = None,
+) -> dict:
+    if auth.role.upper() == "MERCHANT":
+        raise ForbiddenError("Only support or supervisor roles can resolve cases")
+
+    stmt = select(SupportCase).where(SupportCase.id == case_id)
+    case = (await session.execute(stmt)).scalar_one_or_none()
+    if not case:
+        raise NotFoundError(f"Case {case_id} not found")
+
+    expected_version = (
+        req.expected_version if (req and req.expected_version is not None) else case.version
+    )
+    # transition validates _ALLOWED_TRANSITIONS and _verification_passed
+    trans = transition(
+        case=case,
+        to_status="RESOLVED",
+        expected_version=expected_version,
+        actor=auth.user.email,
+    )
+    case.status = trans.new_status
+    case.version = trans.new_version
+
+    event = CaseEvent(
+        id=uuid.uuid4(),
+        case_id=case.id,
+        actor=auth.user.email,
+        event_type="CASE_RESOLVED",
+        from_status="VERIFYING",
+        to_status="RESOLVED",
+        visibility="MERCHANT",
+        payload={"status": "RESOLVED"},
+        created_at=datetime.now(UTC),
+    )
+    session.add(event)
+    await session.commit()
+
+    return success_response(
+        data={
+            "case_id": case.id,
+            "status": "RESOLVED",
+            "version": case.version,
+            "message": "Case successfully resolved following independent verification PASS.",
+        },
         source_type="SYNTHETIC_DEMO",
     )
 

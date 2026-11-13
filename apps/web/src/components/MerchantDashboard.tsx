@@ -1,4 +1,4 @@
-import { FC } from 'react'
+import { useState, FC } from 'react'
 import {
   MerchantProfile,
   TransactionItem,
@@ -6,6 +6,7 @@ import {
   SupportCaseItem,
 } from '../types/api'
 import { SourceBadge } from './SourceBadge'
+import { MerchantCaseModal } from './MerchantCaseModal'
 import {
   AlertCircle,
   ArrowUpRight,
@@ -22,6 +23,7 @@ interface MerchantDashboardProps {
   discrepancy: string
   loading: boolean
   error: string | null
+  token?: string
   onOpenChat: (presetPrompt?: string) => void
 }
 
@@ -33,8 +35,10 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
   discrepancy,
   loading,
   error,
+  token = 'demo-token-merchant-1',
   onOpenChat,
 }) => {
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -194,7 +198,8 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
               cases.map((sc) => (
                 <div
                   key={sc.id}
-                  className="p-3.5 bg-slate-900/60 border border-slate-700/60 rounded-xl flex items-center justify-between gap-3 hover:border-slate-600 transition"
+                  onClick={() => setSelectedCaseId(sc.id)}
+                  className="p-3.5 bg-slate-900/60 border border-slate-700/60 rounded-xl flex items-center justify-between gap-3 hover:border-slate-500 cursor-pointer transition"
                 >
                   <div>
                     <div className="flex items-center gap-2">
@@ -207,7 +212,10 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
                     <p className="text-xs text-slate-300 mt-1 line-clamp-1">{sc.summary}</p>
                   </div>
                   <button
-                    onClick={() => onOpenChat()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedCaseId(sc.id)
+                    }}
                     className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
                     title="View Timeline"
                   >
@@ -219,6 +227,14 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Merchant Case Detail & Timeline Modal */}
+      <MerchantCaseModal
+        isOpen={!!selectedCaseId}
+        onClose={() => setSelectedCaseId(null)}
+        caseId={selectedCaseId}
+        token={token}
+      />
     </div>
   )
 }

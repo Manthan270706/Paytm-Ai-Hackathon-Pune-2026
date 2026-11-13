@@ -206,11 +206,17 @@ class ScopedRepository:
         case = await self.get_case(case_id)
         if case is None:
             raise NotFoundError("Case not found in merchant scope")
+        visibility = (
+            str(payload.get("visibility", "MERCHANT"))
+            if isinstance(payload, dict)
+            else "MERCHANT"
+        )
         event = CaseEvent(
             id=uuid.uuid4(),
             case_id=case.id,
             actor=actor,
             event_type=event_type,
+            visibility=visibility,
             payload=payload,
             from_status=from_status,
             to_status=to_status,

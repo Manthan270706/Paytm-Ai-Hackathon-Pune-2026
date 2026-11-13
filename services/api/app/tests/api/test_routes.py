@@ -209,6 +209,20 @@ def test_case_lifecycle_routes() -> None:
     assert ver_res.json()["data"]["verification_result"] == "PASS"
     assert ver_res.json()["data"]["verifier_role"] == "opssaathi_verifier"
 
+    # Premature resolution attempt without verification PASS is blocked (403)
+    premature_res = client.post(
+        f"/api/v1/cases/{case_id}/resolve",
+        headers={"Authorization": "Bearer demo-token-support_agent-1"},
+    )
+    assert premature_res.status_code == 403
+
+    # Merchant cannot resolve (403)
+    merchant_resolve_res = client.post(
+        f"/api/v1/cases/{case_id}/resolve",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+    )
+    assert merchant_resolve_res.status_code == 403
+
 
 def test_demo_and_metrics_routes() -> None:
     # Reset demo
