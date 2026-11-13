@@ -20,6 +20,10 @@ class AuthContext:
     active_merchant_id: uuid.UUID
     role: str  # MERCHANT, SUPPORT_AGENT, SUPERVISOR
 
+    @property
+    def user_id(self) -> uuid.UUID:
+        return self.user.id
+
 
 async def get_auth_context(
     request: Request,
@@ -39,6 +43,10 @@ async def get_auth_context(
         elif "supervisor" in token:
             role = "SUPERVISOR"
             target_user_id = SUPERVISOR_USER_ID
+        elif "merchant-2" in token or "merchant_2" in token:
+            role = "MERCHANT"
+            active_mid = uuid.UUID("22222222-2222-2222-2222-222222222222")
+            target_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, "merchant2@paytm.demo")
         elif "merchant" in token:
             role = "MERCHANT"
             target_user_id = MERCHANT_USER_ID

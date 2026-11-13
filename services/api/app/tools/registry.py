@@ -40,7 +40,7 @@ class ToolContext:
     """Server-side execution context. Merchant scope is bound here, never from LLM input."""
 
     merchant_id: uuid.UUID
-    session: AsyncSession
+    session: AsyncSession | None = None
     verifier_session: AsyncSession | None = None
     user_id: uuid.UUID | None = None
 

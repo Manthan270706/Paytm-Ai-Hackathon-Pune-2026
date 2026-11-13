@@ -43,10 +43,14 @@ class MockLLMProvider(LLMProvider):
         mock_data: dict[str, Any] = {}
         for name, field in schema.model_fields.items():
             ann = field.annotation
+            origin = getattr(ann, "__origin__", None)
             if ann is str:
-                mock_data[name] = (
-                    "SETTLEMENT_MISMATCH" if "intent" in name else "Mock generated text"
-                )
+                if "id" in name.lower():
+                    mock_data[name] = str(uuid.uuid4())
+                elif "intent" in name.lower():
+                    mock_data[name] = "SETTLEMENT_MISMATCH"
+                else:
+                    mock_data[name] = "Mock generated text"
             elif ann is int:
                 mock_data[name] = 1
             elif ann is float:
@@ -57,6 +61,12 @@ class MockLLMProvider(LLMProvider):
                 mock_data[name] = Decimal("6000.00")
             elif ann is uuid.UUID:
                 mock_data[name] = uuid.uuid4()
+            elif ann is datetime:
+                mock_data[name] = datetime.now(UTC)
+            elif ann is list or origin is list:
+                mock_data[name] = []
+            elif ann is dict or origin is dict:
+                mock_data[name] = {}
             else:
                 mock_data[name] = None
 
