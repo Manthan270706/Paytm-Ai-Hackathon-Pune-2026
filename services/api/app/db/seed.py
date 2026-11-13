@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AgentRun,
     Approval,
     AuditEvent,
     CaseEvent,
@@ -55,13 +56,14 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
         AuditEvent,
         WebhookEvent,
         ToolExecution,
+        AgentRun,
         FollowupJob,
         ResyncRequest,
         Approval,
         CaseEvent,
-        SupportCase,
         Message,
         Conversation,
+        SupportCase,
         SettlementEntry,
         SettlementBatch,
         Transaction,
