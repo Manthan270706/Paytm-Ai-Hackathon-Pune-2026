@@ -1,0 +1,74 @@
+# Environment and secrets (CRITICAL: never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+apps/web/dist/
+apps/web/dist-ssr/
+*.local
+
+# Database & runtime
+*.sqlite
+*.sqlite3
+*.db
+opssaathi.db
+opssaathi_test.db
+postgres-data/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Audio recordings & temporary media
+*.wav
+*.mp3
+*.webm
+*.ogg
+recordings/
+temp/
+scratch/
