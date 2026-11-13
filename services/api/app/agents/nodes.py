@@ -7,6 +7,11 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from app.agents.state import AgentState
+from app.agents.templates import (
+    detect_language,
+    normalize_devanagari_digits,
+    render_investigation_reply,
+)
 from app.agents.wrapper import ToolExecutionWrapper
 from app.core.redaction import redact
 from app.domain.policy import evaluate as evaluate_policy_domain
@@ -30,15 +35,6 @@ def redact_sensitive(text: str) -> str:
     redacted = OTP_PATTERN.sub(r"\1 [SENSITIVE_REDACTED]", redacted)
     return redacted
 
-
-def detect_language(text: str, fallback: str = "en") -> str:
-    """Simple script-based language detection for Indian languages."""
-    # Devanagari script covers Hindi and Marathi
-    if re.search(r"[\u0900-\u097F]", text):
-        if any(w in text for w in ["आहे", "नाही", "करा", "पैसे", "मिळाले"]):
-            return "mr"
-        return "hi"
-    return fallback
 
 
 async def authenticate_session(
@@ -66,7 +62,9 @@ async def sanitize_input(state: AgentState, config: RunnableConfig | None = None
     raw = state.get("input_text", "")
     redaction_res = redact(raw)
     sanitized = redaction_res.clean_text
-    lang = state.get("language") or detect_language(raw)
+    current_lang = state.get("language")
+    detected = detect_language(raw, fallback=current_lang or "en")
+    lang = detected if detected in {"hi", "mr"} or not current_lang else current_lang
     return {
         "sanitized_input": sanitized,
         "language": lang,
@@ -118,9 +116,12 @@ async def collect_issue(state: AgentState, config: RunnableConfig | None = None)
         logger.debug(f"LLM extraction fallback: {e}")
 
     # 2. Deterministic Regex Fallback/Augmentation (ensures Trust Rule 2)
+    normalized_text = normalize_devanagari_digits(text)
     if "amount" not in extracted:
         amount_match = re.search(
-            r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{2})?)", text, re.IGNORECASE
+            r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{2})?)",
+            normalized_text,
+            re.IGNORECASE,
         )
         if amount_match:
             try:
@@ -568,27 +569,13 @@ async def communicate(state: AgentState, config: RunnableConfig | None = None) -
     policy = state.get("policy_evaluation", {})
     recon = state.get("reconciliation_summary", {})
     discrepancy = recon.get("discrepancy", "6000.00")
+    active_case_id = state.get("active_case_id")
 
-    if lang == "hi":
-        reply = (
-            f"मैंने आपके सेटलमेंट रिकॉर्ड्स की जांच की है। हमें ₹{discrepancy} का लेन-देन मिला है "
-            f"जो आपके खाते में नहीं पहुंचा था। मैंने केस दर्ज कर दिया है और सेटलमेंट पुनः समन्वय "
-            f"का अनुरोध किया है, जो वर्तमान में पर्यवेक्षक की मंजूरी के लिए प्रतीक्षारत है।"
-        )
-    elif lang == "mr":
-        reply = (
-            f"मी तुमच्या सेटलमेंटच्या नोंदी तपासल्या आहेत. ₹{discrepancy} ची रक्कम तुमच्या खात्यात "
-            f"जमा झालेली नाही. मी यासाठी सपोर्ट केस नोंदवली आहे आणि सेटलमेंट री-सिंकची विनंती केली आहे, "
-            f"जी मंजुरीच्या प्रतीक्षेत आहे."
-        )
-    else:
-        case_tag = str(state.get("active_case_id", "1024"))[:8]
-        reply = (
-            f"I investigated your settlement records. We found a ₹{discrepancy} payment that was "
-            "successfully captured but is missing from your settlement batch. "
-            f"I have raised Support Case #{case_tag} and requested a settlement re-sync, "
-            "which is currently awaiting supervisor approval."
-        )
+    reply = render_investigation_reply(
+        language=lang,
+        discrepancy=str(discrepancy),
+        case_id=str(active_case_id) if active_case_id else None,
+    )
 
     traces: list[dict[str, Any]] = [
         {

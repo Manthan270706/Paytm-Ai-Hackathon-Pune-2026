@@ -115,14 +115,18 @@ async def run_agent_turn(
             agent_run.case_id = active_case_id
             conv.active_case_id = active_case_id
 
-    # 7. Record assistant response message
+    # 7. Record assistant response message and persist detected language on conversation
+    detected_lang = result_state.get("language", language)
+    conv.language = detected_lang
+    user_msg.language = detected_lang
+
     reply_text = result_state.get("final_reply", "I have investigated your settlement records.")
     assistant_msg = Message(
         id=uuid.uuid4(),
         conversation_id=conv.id,
         role="ASSISTANT",
         content=reply_text,
-        language=result_state.get("language", language),
+        language=detected_lang,
         created_at=datetime.now(UTC),
     )
     session.add(assistant_msg)
