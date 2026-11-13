@@ -9,6 +9,7 @@ interface HeaderProps {
   onLanguageChange: (lang: string) => void
   onResetDemo: () => void
   isResetting: boolean
+  isReplayMode?: boolean
 }
 
 export const Header: FC<HeaderProps> = ({
@@ -18,6 +19,7 @@ export const Header: FC<HeaderProps> = ({
   onLanguageChange,
   onResetDemo,
   isResetting,
+  isReplayMode = false,
 }) => {
   return (
     <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
@@ -33,6 +35,15 @@ export const Header: FC<HeaderProps> = ({
               <span className="text-[10px] font-semibold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">
                 Track 3
               </span>
+              {isReplayMode && (
+                <span
+                  className="text-[10px] font-semibold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
+                  title="Serving deterministic cached golden scenario (PRD §12.3 Replay Mode)"
+                >
+                  <RotateCcw className="h-2.5 w-2.5 animate-spin" />
+                  Replay Mode
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 font-medium">Autonomous Merchant Operations Teammate</p>
           </div>

@@ -70,6 +70,8 @@ export interface ChatMessage {
   language: string
   created_at: string
   channel?: 'CHAT' | 'VOICE'
+  is_replay?: boolean
+  llm_source?: string
 }
 
 export interface VoiceSessionData {
@@ -87,6 +89,8 @@ export interface VoiceTranscriptionData {
   run_id?: string | null
   active_case_id?: string | null
   evidence_summary?: DiscrepancySummary | null
+  is_replay?: boolean
+  llm_source?: string
 }
 
 export interface TraceEvent {

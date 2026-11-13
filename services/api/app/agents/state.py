@@ -42,3 +42,5 @@ class AgentState(TypedDict, total=False):
     trace_events: list[dict[str, Any]]
     error: str | None
     status: str  # "RUNNING" | "COMPLETED" | "AWAITING_APPROVAL" | "FAILED"
+    is_replay: bool
+    llm_source: str

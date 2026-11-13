@@ -44,6 +44,7 @@ export default function App() {
   const [isResetting, setIsResetting] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false)
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null)
+  const [isReplayMode, setIsReplayMode] = useState<boolean>(false)
 
   const token =
     currentRole === 'MERCHANT'
@@ -165,9 +166,14 @@ export default function App() {
         language: agentData.language,
         created_at: new Date().toISOString(),
         channel: 'CHAT',
+        is_replay: agentData.is_replay,
+        llm_source: agentData.llm_source,
       }
       setMessages((prev) => [...prev, botMsg])
 
+      if (agentData.is_replay) {
+        setIsReplayMode(true)
+      }
       if (agentData.conversation_id) {
         setConversationId(agentData.conversation_id)
       }
@@ -238,9 +244,14 @@ export default function App() {
         language: voiceData.language,
         created_at: new Date().toISOString(),
         channel: 'VOICE',
+        is_replay: voiceData.is_replay,
+        llm_source: voiceData.llm_source,
       }
       setMessages((prev) => [...prev, botMsg])
 
+      if (voiceData.is_replay) {
+        setIsReplayMode(true)
+      }
       if (voiceData.conversation_id) {
         setConversationId(voiceData.conversation_id)
       }
@@ -322,6 +333,7 @@ export default function App() {
         setConversationId(null)
         setActiveCaseDetail(null)
         setVerificationResult(null)
+        setIsReplayMode(false)
         await loadDashboardData()
       }
     } catch (err) {
@@ -462,6 +474,7 @@ export default function App() {
         onLanguageChange={setCurrentLanguage}
         onResetDemo={handleResetDemo}
         isResetting={isResetting}
+        isReplayMode={isReplayMode}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
@@ -493,6 +506,7 @@ export default function App() {
                 activeCaseId={activeCaseId}
                 currentLanguage={currentLanguage}
                 activeConversationId={conversationId}
+                isReplayMode={isReplayMode}
               />
             </div>
           </>
