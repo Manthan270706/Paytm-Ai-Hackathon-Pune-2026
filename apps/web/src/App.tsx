@@ -1,92 +1,351 @@
 import { useState, useEffect } from 'react'
+import {
+  UserRole,
+  MerchantProfile,
+  TransactionItem,
+  SettlementBatchItem,
+  SupportCaseItem,
+  ChatMessage,
+  TraceEvent,
+  DiscrepancySummary,
+} from './types/api'
+import { Header } from './components/Header'
+import { MerchantDashboard } from './components/MerchantDashboard'
+import { ChatWorkspace } from './components/ChatWorkspace'
+import { OperationsConsole } from './components/OperationsConsole'
+import { TracePanel } from './components/TracePanel'
 
-interface HealthData {
-  status: string
-  environment: string
-  llm_provider: string
-  voice_provider: string
-  demo_data_mode: boolean
-  services: {
-    api: string
-    database: string
-  }
-}
+const API_BASE = 'http://localhost:8000/api/v1'
 
 export default function App() {
-  const [health, setHealth] = useState<HealthData | null>(null)
+  const [currentRole, setCurrentRole] = useState<UserRole>('MERCHANT')
+  const [currentLanguage, setCurrentLanguage] = useState<string>('en')
+  const [profile, setProfile] = useState<MerchantProfile | null>(null)
+  const [transactions, setTransactions] = useState<TransactionItem[]>([])
+  const [settlements, setSettlements] = useState<SettlementBatchItem[]>([])
+  const [cases, setCases] = useState<SupportCaseItem[]>([])
+  const [discrepancy, setDiscrepancy] = useState<string>('6000.00')
+
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [evidenceSummary, setEvidenceSummary] = useState<DiscrepancySummary | null>(null)
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(null)
+  const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [isTraceOpen, setIsTraceOpen] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isSending, setIsSending] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [verificationResult, setVerificationResult] = useState<any | null>(null)
+
+  const token =
+    currentRole === 'MERCHANT'
+      ? 'demo-token-merchant-1'
+      : 'demo-token-support_agent-1'
+
+  // Fetch initial dashboard and case data
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
+      const headers = { Authorization: `Bearer ${token}` }
+
+      // 1. Merchant Profile
+      const merchantRes = await fetch(
+        `${API_BASE}/merchants/11111111-1111-1111-1111-111111111111`,
+        { headers }
+      )
+      if (merchantRes.ok) {
+        const mData = await merchantRes.json()
+        setProfile(mData.data)
+      }
+
+      // 2. Transactions
+      const txnRes = await fetch(`${API_BASE}/transactions`, { headers })
+      if (txnRes.ok) {
+        const tData = await txnRes.json()
+        setTransactions(tData.data?.items || [])
+      }
+
+      // 3. Settlements
+      const stlRes = await fetch(`${API_BASE}/settlements`, { headers })
+      if (stlRes.ok) {
+        const sData = await stlRes.json()
+        setSettlements(sData.data?.batches || [])
+        if (sData.data?.discrepancy_amount) {
+          setDiscrepancy(sData.data.discrepancy_amount)
+        }
+      }
+
+      // 4. Cases
+      const caseRes = await fetch(`${API_BASE}/cases`, { headers })
+      if (caseRes.ok) {
+        const cData = await caseRes.json()
+        setCases(cData.data?.items || [])
+      }
+
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect to OpsSaathi API')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/health')
-      .then((res) => {
-        if (!res.ok) throw new Error('API offline or unreachable')
-        return res.json()
+    loadDashboardData()
+  }, [currentRole])
+
+  // Handle sending a message to the agent
+  const handleSendMessage = async (text: string) => {
+    const userMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'USER',
+      content: text,
+      language: currentLanguage,
+      created_at: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, userMsg])
+    setIsSending(true)
+
+    try {
+      const res = await fetch(`${API_BASE}/agent/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: text,
+          language: currentLanguage,
+        }),
       })
-      .then((data) => {
-        setHealth(data.data)
-        setLoading(false)
+
+      if (!res.ok) throw new Error('Agent execution failed')
+      const data = await res.json()
+      const agentData = data.data
+
+      const botMsg: ChatMessage = {
+        id: `msg-${Date.now()}-bot`,
+        role: 'ASSISTANT',
+        content: agentData.reply,
+        language: agentData.language,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, botMsg])
+
+      if (agentData.evidence_summary) {
+        setEvidenceSummary(agentData.evidence_summary)
+      }
+      if (agentData.active_case_id) {
+        setActiveCaseId(agentData.active_case_id)
+      }
+
+      // Stream SSE trace events for this run
+      if (agentData.run_id) {
+        setActiveRunId(agentData.run_id)
+        startSseTrace(agentData.run_id)
+      }
+
+      // Refresh cases list
+      loadDashboardData()
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
+        role: 'ASSISTANT',
+        content: `Error contacting agent: ${err.message}`,
+        language: 'en',
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, errorMsg])
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  // Stream live SSE trace events
+  const startSseTrace = (runId: string) => {
+    try {
+      const eventSource = new EventSource(`${API_BASE}/agent/runs/${runId}/events`)
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data)
+          setTraceEvents((prev) => [...prev, parsed])
+          if (parsed.type === 'COMPLETED') {
+            eventSource.close()
+          }
+        } catch {
+          // ignore parsing error
+        }
+      }
+      eventSource.onerror = () => {
+        eventSource.close()
+      }
+    } catch {
+      // EventSource fallback
+    }
+  }
+
+  // Demo Reset
+  const handleResetDemo = async () => {
+    try {
+      setIsResetting(true)
+      const res = await fetch(`${API_BASE}/demo/reset`, { method: 'POST' })
+      if (res.ok) {
+        setMessages([])
+        setTraceEvents([])
+        setEvidenceSummary(null)
+        setActiveCaseId(null)
+        setVerificationResult(null)
+        await loadDashboardData()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
+  // Simulate bank settlement
+  const handleSimulateSettlement = async () => {
+    try {
+      setIsSimulating(true)
+      const res = await fetch(`${API_BASE}/demo/simulate-settlement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: '6000.00', batch_ref: 'BATCH_01' }),
       })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
+      if (res.ok) {
+        await loadDashboardData()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSimulating(false)
+    }
+  }
+
+  // Approve case
+  const handleApproveCase = async (caseId: string, version: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          expected_version: version,
+          action_hash: 'hash_resync_batch_01',
+        }),
       })
-  }, [])
+      if (res.ok) {
+        await loadDashboardData()
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Reject case
+  const handleRejectCase = async (caseId: string, version: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          expected_version: version,
+          action_hash: 'hash_resync_batch_01',
+          reason: 'Manual inspection required',
+        }),
+      })
+      if (res.ok) {
+        await loadDashboardData()
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Verify resolution
+  const handleVerifyCase = async (caseId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/verify`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setVerificationResult(data.data)
+        await loadDashboardData()
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
-      <div className="max-w-xl w-full bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-xl bg-sky-500 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-sky-500/20">
-            P
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">OpsSaathi AI</h1>
-            <p className="text-xs text-sky-400 font-medium">
-              Autonomous Merchant Operations Teammate (Track 3)
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <Header
+        currentRole={currentRole}
+        onRoleChange={setCurrentRole}
+        currentLanguage={currentLanguage}
+        onLanguageChange={setCurrentLanguage}
+        onResetDemo={handleResetDemo}
+        isResetting={isResetting}
+      />
 
-        <div className="mt-6 p-4 rounded-xl bg-slate-900/60 border border-slate-700/60 space-y-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-400">Backend API Status:</span>
-            {loading ? (
-              <span className="text-amber-400 animate-pulse font-medium">Checking...</span>
-            ) : error ? (
-              <span className="text-rose-400 font-medium">{error}</span>
-            ) : (
-              <span className="text-emerald-400 font-medium">Healthy ({health?.environment})</span>
-            )}
-          </div>
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+        {currentRole === 'MERCHANT' ? (
+          <>
+            <MerchantDashboard
+              profile={profile}
+              transactions={transactions}
+              settlements={settlements}
+              cases={cases}
+              discrepancy={discrepancy}
+              loading={loading}
+              error={error}
+              onOpenChat={(prompt) => {
+                if (prompt) handleSendMessage(prompt)
+              }}
+            />
 
-          {health && (
-            <>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">LLM Provider:</span>
-                <span className="text-slate-200 uppercase font-mono text-xs bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                  {health.llm_provider}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Voice Provider:</span>
-                <span className="text-slate-200 uppercase font-mono text-xs bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                  {health.voice_provider}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Demo Data Mode:</span>
-                <span className="text-emerald-400 text-xs font-semibold">Active</span>
-              </div>
-            </>
-          )}
-        </div>
+            <div className="pt-4 border-t border-slate-800">
+              <h3 className="text-lg font-bold text-white mb-4">Autonomous Merchant Support Chat</h3>
+              <ChatWorkspace
+                messages={messages}
+                evidenceSummary={evidenceSummary}
+                onSendMessage={handleSendMessage}
+                isSending={isSending}
+                onToggleTrace={() => setIsTraceOpen(!isTraceOpen)}
+                traceCount={traceEvents.length}
+                activeCaseId={activeCaseId}
+              />
+            </div>
+          </>
+        ) : (
+          <OperationsConsole
+            cases={cases}
+            onApproveCase={handleApproveCase}
+            onRejectCase={handleRejectCase}
+            onSimulateSettlement={handleSimulateSettlement}
+            onVerifyCase={handleVerifyCase}
+            isSimulating={isSimulating}
+            verificationResult={verificationResult}
+          />
+        )}
+      </main>
 
-        <div className="mt-6 flex justify-between items-center text-xs text-slate-500 border-t border-slate-700/60 pt-4">
-          <span>Team Two Bits</span>
-          <span>Paytm Build for India – Pune Finale</span>
-        </div>
-      </div>
+      <TracePanel
+        events={traceEvents}
+        isOpen={isTraceOpen}
+        onClose={() => setIsTraceOpen(false)}
+        runId={activeRunId}
+      />
     </div>
   )
 }
