@@ -607,6 +607,198 @@
         }
       }
     },
+    "/api/v1/voice/transcribe": {
+      "post": {
+        "tags": [
+          "Voice"
+        ],
+        "summary": "Transcribe speech audio bytes to text",
+        "operationId": "transcribe_voice_api_v1_voice_transcribe_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceTranscribeAudioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Transcribe Voice Api V1 Voice Transcribe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voice/synthesize": {
+      "post": {
+        "tags": [
+          "Voice"
+        ],
+        "summary": "Synthesize text to speech",
+        "operationId": "synthesize_voice_api_v1_voice_synthesize_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceSynthesizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Synthesize Voice Api V1 Voice Synthesize Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voice/tts/audio": {
+      "get": {
+        "tags": [
+          "Voice"
+        ],
+        "summary": "Stream synthesized audio as WAV",
+        "operationId": "stream_synthesized_audio_api_v1_voice_tts_audio_get",
+        "parameters": [
+          {
+            "name": "text",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Text to synthesize",
+              "title": "Text"
+            },
+            "description": "Text to synthesize"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Target language (en, hi, mr)",
+              "default": "en",
+              "title": "Language"
+            },
+            "description": "Target language (en, hi, mr)"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases": {
       "get": {
         "tags": [
@@ -1680,6 +1872,48 @@
         "type": "object",
         "title": "VoiceSessionRequest"
       },
+      "VoiceSynthesizeRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "en"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "VoiceSynthesizeRequest"
+      },
+      "VoiceTranscribeAudioRequest": {
+        "properties": {
+          "audio_base64": {
+            "type": "string",
+            "title": "Audio Base64"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio_base64"
+        ],
+        "title": "VoiceTranscribeAudioRequest"
+      },
       "VoiceTranscriptionRequest": {
         "properties": {
           "conversation_id": {
@@ -1695,6 +1929,11 @@
             "type": "string",
             "title": "Language",
             "default": "en"
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "title": "Generate Audio",
+            "default": false
           }
         },
         "type": "object",

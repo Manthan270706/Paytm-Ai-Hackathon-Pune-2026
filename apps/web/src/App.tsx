@@ -230,6 +230,7 @@ export default function App() {
           conversation_id: conversationId || undefined,
           transcript,
           language: currentLanguage,
+          generate_audio: true,
         }),
       })
 
@@ -268,17 +269,28 @@ export default function App() {
         startSseTrace(voiceData.run_id)
       }
 
-      // Spoken reply with browser synthesis per PRD §5.2
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel()
-        const utterance = new SpeechSynthesisUtterance(voiceData.reply_text)
-        utterance.lang =
-          voiceData.language === 'hi'
-            ? 'hi-IN'
-            : voiceData.language === 'mr'
-              ? 'mr-IN'
-              : 'en-IN'
-        window.speechSynthesis.speak(utterance)
+      // Audio playback: Sarvam synthesized audio -> Browser speech synthesis fallback
+      const playBrowserSpeech = () => {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel()
+          const utterance = new SpeechSynthesisUtterance(voiceData.reply_text)
+          utterance.lang =
+            voiceData.language === 'hi'
+              ? 'hi-IN'
+              : voiceData.language === 'mr'
+                ? 'mr-IN'
+                : 'en-IN'
+          window.speechSynthesis.speak(utterance)
+        }
+      }
+
+      if (voiceData.reply_audio_url) {
+        const audio = new Audio(voiceData.reply_audio_url)
+        audio.play().catch(() => {
+          playBrowserSpeech()
+        })
+      } else {
+        playBrowserSpeech()
       }
 
       // Refresh cases list

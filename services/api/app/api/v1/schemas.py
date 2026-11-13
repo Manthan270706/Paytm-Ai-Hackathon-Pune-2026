@@ -140,6 +140,7 @@ class VoiceTranscriptionRequest(BaseModel):
     conversation_id: uuid.UUID
     transcript: str
     language: str = "en"
+    generate_audio: bool = False
 
 
 class VoiceTranscriptionResponse(BaseModel):
@@ -152,6 +153,29 @@ class VoiceTranscriptionResponse(BaseModel):
     evidence_summary: dict[str, Any] | None = None
     is_replay: bool = False
     llm_source: str = "SYNTHETIC_DEMO"
+
+
+class VoiceSynthesizeRequest(BaseModel):
+    text: str
+    language: str = "en"
+
+
+class VoiceSynthesizeResponse(BaseModel):
+    audio_base64: str
+    format: str = "audio/wav"
+    language: str = "en"
+    source: str = "mock"
+
+
+class VoiceTranscribeAudioRequest(BaseModel):
+    audio_base64: str
+    language: str | None = None
+
+
+class VoiceTranscribeAudioResponse(BaseModel):
+    transcript: str
+    language: str = "en"
+    source: str = "mock"
 
 
 # ------------------------------------------------------------------------------

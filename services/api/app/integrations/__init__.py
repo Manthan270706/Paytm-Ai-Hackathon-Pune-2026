@@ -22,6 +22,12 @@ from app.integrations.mock import (
     MockSpeechToText,
     MockTextToSpeech,
 )
+from app.integrations.sarvam.provider import (
+    FallbackSpeechToText,
+    FallbackTextToSpeech,
+    SarvamSpeechToText,
+    SarvamTextToSpeech,
+)
 
 __all__ = [
     "LLMProvider",
@@ -38,6 +44,10 @@ __all__ = [
     "MockLLMProvider",
     "MockSpeechToText",
     "MockTextToSpeech",
+    "SarvamSpeechToText",
+    "SarvamTextToSpeech",
+    "FallbackSpeechToText",
+    "FallbackTextToSpeech",
     "MockPaymentProvider",
     "MockSettlementProvider",
     "MockSettlementOpsProvider",
@@ -63,14 +73,18 @@ def get_stt_provider(name: str | None = None) -> SpeechToText:
     provider_name = (name or settings.VOICE_PROVIDER).lower()
     if provider_name == "mock":
         return MockSpeechToText()
-    return MockSpeechToText()
+    if provider_name == "sarvam_direct":
+        return SarvamSpeechToText()
+    return FallbackSpeechToText()
 
 
 def get_tts_provider(name: str | None = None) -> TextToSpeech:
     provider_name = (name or settings.VOICE_PROVIDER).lower()
     if provider_name == "mock":
         return MockTextToSpeech()
-    return MockTextToSpeech()
+    if provider_name == "sarvam_direct":
+        return SarvamTextToSpeech()
+    return FallbackTextToSpeech()
 
 
 def get_payment_provider(name: str | None = None) -> PaymentProvider:
