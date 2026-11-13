@@ -271,16 +271,19 @@ def test_demo_and_metrics_routes() -> None:
 
 
 def test_paytm_webhook_route() -> None:
+    from app.tests.conftest import generate_test_paytm_checksum
+
+    params = {
+        "event_id": f"EVT-{uuid.uuid4()}",
+        "provider_txn_id": "TXN_78456321",
+        "order_id": "ORD_01",
+        "amount": "6000.00",
+        "status": "SUCCESS",
+    }
+    checksum = generate_test_paytm_checksum(params)
     webhook_res = client.post(
         "/api/v1/webhooks/paytm",
-        json={
-            "event_id": f"EVT-{uuid.uuid4()}",
-            "provider_txn_id": "TXN_78456321",
-            "order_id": "ORD_01",
-            "amount": "6000.00",
-            "status": "SUCCESS",
-            "checksum": "mock_checksum_abc123",
-        },
+        json={**params, "CHECKSUMHASH": checksum},
     )
-    assert webhook_res.status_code == 200
+    assert webhook_res.status_code == 200, webhook_res.text
     assert webhook_res.json()["data"]["received"] is True

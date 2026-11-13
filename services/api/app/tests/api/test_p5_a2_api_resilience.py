@@ -412,9 +412,7 @@ async def test_resync_request_idempotency_prevents_duplicate_send() -> None:
         assert output.status == "ACKNOWLEDGED"
 
         # Verify only one record exists in DB
-        stmt = select(ResyncRequest).where(
-            ResyncRequest.idempotency_key == idempotency_key
-        )
+        stmt = select(ResyncRequest).where(ResyncRequest.idempotency_key == idempotency_key)
         records = list((await session.execute(stmt)).scalars().all())
         assert len(records) == 1
 
@@ -423,13 +421,19 @@ async def test_resync_request_idempotency_prevents_duplicate_send() -> None:
 # 9. Duplicate Webhook Deduplication
 # ------------------------------------------------------------------------------
 async def test_duplicate_webhook_deduplication() -> None:
+    from app.tests.conftest import generate_test_paytm_checksum
+
     event_id = f"ORDER_DUP_{uuid.uuid4().hex[:8]}"
-    payload = {
+    params = {
         "event_id": event_id,
         "ORDERID": event_id,
         "TXNAMOUNT": "6000.00",
         "STATUS": "TXN_SUCCESS",
-        "checksum": "demo_valid_signature",
+    }
+    checksum = generate_test_paytm_checksum(params)
+    payload = {
+        **params,
+        "CHECKSUMHASH": checksum,
     }
 
     transport = ASGITransport(app=app)

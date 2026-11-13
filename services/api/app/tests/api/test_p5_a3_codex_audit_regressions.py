@@ -65,20 +65,28 @@ async def test_regression_2_webhook_demo_bypass_synthetic_demo_and_validation() 
 
     DEMO_DATA_MODE=true and labelled SYNTHETIC_DEMO, never PAYTM_STAGING.
     """
+    from app.tests.conftest import generate_test_paytm_checksum
+
     event_id = f"EVT-REGRESSION-{uuid.uuid4().hex[:8]}"
-    payload = {
+    params = {
         "event_id": event_id,
         "provider_txn_id": "TXN_MOCK_1",
         "order_id": "ORD_MOCK_1",
         "amount": "6000.00",
         "status": "SUCCESS",
-        "checksum": "mock_checksum_abc123",
+    }
+    valid_checksum = generate_test_paytm_checksum(params)
+    payload = {
+        **params,
+        "CHECKSUMHASH": valid_checksum,
     }
 
-    # When DEMO_DATA_MODE=True: demo bypass succeeds and labels SYNTHETIC_DEMO
+    # When DEMO_DATA_MODE=True: demo fallback validates with demo key and labels SYNTHETIC_DEMO
     original_demo_mode = settings.DEMO_DATA_MODE
+    original_key = settings.PAYTM_MERCHANT_KEY
     try:
         settings.DEMO_DATA_MODE = True
+        settings.PAYTM_MERCHANT_KEY = ""
         res = client.post("/api/v1/webhooks/paytm", json=payload)
         assert res.status_code == 200
         body = res.json()
@@ -93,8 +101,11 @@ async def test_regression_2_webhook_demo_bypass_synthetic_demo_and_validation() 
             assert audit_entry.payload["source_type"] == "SYNTHETIC_DEMO"
             assert audit_entry.payload["demo_bypass"] is True
 
-        # While DEMO_DATA_MODE=True, invalid demo signatures must be rejected with 400
+        # While DEMO_DATA_MODE=True, hardcoded mock or invalid demo signatures
+        # must be rejected with 400
         for bad_sig in [
+            "mock_checksum_abc123",
+            "demo_valid_signature",
             "demo_invalid",
             "demo_invalid_signature",
             "demo_tampered",
@@ -103,7 +114,7 @@ async def test_regression_2_webhook_demo_bypass_synthetic_demo_and_validation() 
             res_bad = client.post(
                 "/api/v1/webhooks/paytm",
                 json={
-                    **payload,
+                    **params,
                     "event_id": f"EVT-REGRESSION-{uuid.uuid4().hex[:8]}",
                     "checksum": bad_sig,
                 },
@@ -111,15 +122,20 @@ async def test_regression_2_webhook_demo_bypass_synthetic_demo_and_validation() 
             assert res_bad.status_code == 400
             assert "signature verification failed" in res_bad.json()["detail"].lower()
 
-        # When DEMO_DATA_MODE=False: demo bypass signature fails with 400
+        # When DEMO_DATA_MODE=False and merchant key is empty: validation fails with 400
         settings.DEMO_DATA_MODE = False
         res_fail = client.post(
             "/api/v1/webhooks/paytm",
-            json={**payload, "event_id": f"EVT-REGRESSION-{uuid.uuid4().hex[:8]}"},
+            json={
+                **params,
+                "event_id": f"EVT-REGRESSION-{uuid.uuid4().hex[:8]}",
+                "checksum": valid_checksum,
+            },
         )
         assert res_fail.status_code == 400
     finally:
         settings.DEMO_DATA_MODE = original_demo_mode
+        settings.PAYTM_MERCHANT_KEY = original_key
 
 
 @pytest.mark.asyncio

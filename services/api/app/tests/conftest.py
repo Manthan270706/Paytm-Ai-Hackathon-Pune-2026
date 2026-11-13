@@ -66,3 +66,23 @@ async def setup_test_suite_db() -> AsyncGenerator[None, None]:
 @pytest.fixture
 def test_client() -> TestClient:
     return TestClient(app)
+
+
+def generate_test_paytm_checksum(
+    params: dict[str, object], key: str = "0123456789abcdef", salt: str = "aB3x"
+) -> str:
+    """Helper generating standard Paytm AES-CBC PKCS7 encrypted checksum for test payloads."""
+    import base64
+    import hashlib
+
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    iv = b"@@@@&&&&####$$$$"
+    parameter_string = "|".join(str(params[k]) for k in sorted(params))
+    digest = hashlib.sha256(f"{parameter_string}|{salt}".encode()).hexdigest() + salt
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded = padder.update(digest.encode("ascii")) + padder.finalize()
+    encryptor = Cipher(algorithms.AES(key.encode("utf-8")), modes.CBC(iv)).encryptor()
+    ciphertext = encryptor.update(padded) + encryptor.finalize()
+    return base64.b64encode(ciphertext).decode("ascii")

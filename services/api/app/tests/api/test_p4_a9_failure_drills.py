@@ -111,27 +111,33 @@ async def test_drill_03_sarvam_unavailable_fallback() -> None:
     stt = FallbackSpeechToText()
     tts = FallbackTextToSpeech()
 
-    with patch.object(
-        stt.sarvam_stt,
-        "transcribe",
-        side_effect=RuntimeError("Sarvam STT service unavailable"),
-    ), patch.object(
-        stt.sarvam_stt,
-        "is_available",
-        return_value=True,
+    with (
+        patch.object(
+            stt.sarvam_stt,
+            "transcribe",
+            side_effect=RuntimeError("Sarvam STT service unavailable"),
+        ),
+        patch.object(
+            stt.sarvam_stt,
+            "is_available",
+            return_value=True,
+        ),
     ):
         transcript = await stt.transcribe(b"dummy_wav_bytes", language="en")
         assert transcript != ""
         assert stt.last_source == "mock"
 
-    with patch.object(
-        tts.sarvam_tts,
-        "synthesize",
-        side_effect=RuntimeError("Sarvam TTS service unavailable"),
-    ), patch.object(
-        tts.sarvam_tts,
-        "is_available",
-        return_value=True,
+    with (
+        patch.object(
+            tts.sarvam_tts,
+            "synthesize",
+            side_effect=RuntimeError("Sarvam TTS service unavailable"),
+        ),
+        patch.object(
+            tts.sarvam_tts,
+            "is_available",
+            return_value=True,
+        ),
     ):
         audio_bytes = await tts.synthesize("Test response", language="en")
         assert len(audio_bytes) > 0
@@ -145,14 +151,17 @@ async def test_drill_04_paytm_staging_unavailable_fixtures() -> None:
     """Drill 4: Paytm staging failure falls back to labelled SYNTHETIC_DEMO fixtures."""
     prov = FallbackPaymentProvider()
 
-    with patch.object(
-        prov.paytm_provider,
-        "get_transaction_status",
-        side_effect=httpx.HTTPError("Paytm staging gateway 502 Bad Gateway"),
-    ), patch.object(
-        prov.paytm_provider,
-        "is_available",
-        return_value=True,
+    with (
+        patch.object(
+            prov.paytm_provider,
+            "get_transaction_status",
+            side_effect=httpx.HTTPError("Paytm staging gateway 502 Bad Gateway"),
+        ),
+        patch.object(
+            prov.paytm_provider,
+            "is_available",
+            return_value=True,
+        ),
     ):
         res = await prov.get_transaction_status(provider_txn_id="TXN_78456321")
         assert res.source_type == "SYNTHETIC_DEMO"
@@ -167,6 +176,8 @@ async def test_drill_04_paytm_staging_unavailable_fixtures() -> None:
 async def test_drill_05_duplicate_webhook_deduplication() -> None:
     """Drill 5: Duplicate webhook delivery is detected and deduplicated."""
     transport = ASGITransport(app=app)
+    from app.tests.conftest import generate_test_paytm_checksum
+
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         event_id = f"evt_drill_{uuid.uuid4().hex[:8]}"
         payload = {
@@ -175,7 +186,8 @@ async def test_drill_05_duplicate_webhook_deduplication() -> None:
             "amount": "6000.00",
             "status": "TXN_SUCCESS",
         }
-        headers = {"x-paytm-signature": "demo_valid_signature"}
+        checksum = generate_test_paytm_checksum(payload)
+        headers = {"x-paytm-signature": checksum}
 
         # First delivery: processed
         res1 = await client.post("/api/v1/webhooks/paytm", json=payload, headers=headers)
