@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from app.agents.state import AgentState
 from app.agents.wrapper import ToolExecutionWrapper
+from app.core.redaction import redact
 from app.db.models import SupportCase
 from app.tools.registry import ToolContext
 
@@ -56,9 +57,10 @@ async def authenticate_session(
 
 
 async def sanitize_input(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
-    """Node: masks sensitive tokens and detects language."""
+    """Node: masks sensitive tokens (OTP, PIN, CVV, Card Numbers) and detects language."""
     raw = state.get("input_text", "")
-    sanitized = redact_sensitive(raw)
+    redaction_res = redact(raw)
+    sanitized = redaction_res.clean_text
     lang = state.get("language") or detect_language(raw)
     return {
         "sanitized_input": sanitized,
@@ -69,17 +71,18 @@ async def sanitize_input(state: AgentState, config: RunnableConfig | None = None
                 "node": "sanitize_input",
                 "status": "SUCCESS",
                 "language": lang,
+                "redacted_types": redaction_res.redacted_types,
             }
         ],
     }
 
 
 async def collect_issue(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
-    """Node: extracts mentioned entities like amounts or dates."""
+    """Node: extracts mentioned entities like amounts, dates, or references."""
     text = state.get("sanitized_input", "")
     extracted: dict[str, Any] = {}
 
-    # Simple regex extraction for INR amount
+    # Extract INR amount
     amount_match = re.search(
         r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{2})?)", text, re.IGNORECASE
     )
@@ -90,8 +93,18 @@ async def collect_issue(state: AgentState, config: RunnableConfig | None = None)
         except Exception:
             pass
 
+    # Extract order / transaction / batch reference if present
+    ref_match = re.search(r"\b((?:TXN|ORDER|BATCH)[-_A-Za-z0-9]+)\b", text, re.IGNORECASE)
+    if ref_match:
+        extracted["reference"] = ref_match.group(1).upper()
+
+    missing_fields = []
+    if "amount" not in extracted and "reference" not in extracted:
+        missing_fields.append("amount_or_reference")
+
     return {
         "extracted_entities": extracted,
+        "missing_fields": missing_fields,
         "trace_events": state.get("trace_events", [])
         + [
             {
@@ -135,19 +148,23 @@ async def load_merchant_context(
     merchant_id = state["merchant_id"]
 
     ctx = ToolContext(merchant_id=merchant_id, session=session)
-    _, trace = await wrapper.execute_tool(
+    out_ctx, trace = await wrapper.execute_tool(
         tool_name="get_merchant_context",
         raw_input={},
         tool_context=ctx,
         agent_run_id=state["run_id"],
     )
 
+    merchant_ctx = {
+        "merchant_id": str(merchant_id),
+        "external_mid": getattr(out_ctx, "mid", "MID_DEMO_TWOBITS"),
+        "display_name": getattr(out_ctx, "display_name", "Two Bits Chai & Snacks"),
+        "status": getattr(out_ctx, "status", "ACTIVE"),
+        "preferred_language": getattr(out_ctx, "preferred_language", "en"),
+    }
+
     return {
-        "merchant_context": {
-            "merchant_id": str(merchant_id),
-            "display_name": "Two Bits Chai & Snacks",
-            "active": True,
-        },
+        "merchant_context": merchant_ctx,
         "trace_events": state.get("trace_events", []) + [trace],
     }
 
@@ -160,26 +177,47 @@ async def investigate(state: AgentState, config: RunnableConfig | None = None) -
     merchant_id = state["merchant_id"]
     ctx = ToolContext(merchant_id=merchant_id, session=session)
 
-    # 1. find_transactions
-    _, trace_txn = await wrapper.execute_tool(
+    extracted = state.get("extracted_entities", {})
+    txn_input: dict[str, Any] = {}
+    if "reference" in extracted:
+        ref = extracted["reference"]
+        if ref.startswith("ORDER"):
+            txn_input["order_id"] = ref
+        else:
+            txn_input["transaction_id"] = ref
+
+    # 1. find_transactions (retrieves merchant-scoped captures)
+    out_txn, trace_txn = await wrapper.execute_tool(
         tool_name="find_transactions",
-        raw_input={"amount_min": "100.00"},
+        raw_input=txn_input,
         tool_context=ctx,
         agent_run_id=state["run_id"],
     )
 
-    # 2. get_settlement_entries
-    _, trace_stl = await wrapper.execute_tool(
+    txn_ids = getattr(out_txn, "source_ids", [])
+    txns = getattr(out_txn, "transactions", [])
+
+    # 2. get_settlement_entries (retrieves merchant-scoped settlement entries)
+    stl_input: dict[str, Any] = {}
+    if "reference" in extracted and extracted["reference"].startswith("BATCH"):
+        stl_input["batch_ref"] = extracted["reference"]
+
+    out_stl, trace_stl = await wrapper.execute_tool(
         tool_name="get_settlement_entries",
-        raw_input={"limit": 50},
+        raw_input=stl_input,
         tool_context=ctx,
         agent_run_id=state["run_id"],
     )
+
+    entry_ids = getattr(out_stl, "source_ids", [])
+    entries = getattr(out_stl, "entries", [])
 
     return {
         "investigation_data": {
-            "transactions_found": 1,
-            "settlements_found": 1,
+            "transactions_found": len(txns) if hasattr(txns, "__len__") else 0,
+            "settlements_found": len(entries) if hasattr(entries, "__len__") else 0,
+            "transaction_ids": txn_ids,
+            "settlement_entry_ids": entry_ids,
         },
         "trace_events": state.get("trace_events", []) + [trace_txn, trace_stl],
     }
@@ -195,26 +233,44 @@ async def reconcile_deterministically(
     merchant_id = state["merchant_id"]
     ctx = ToolContext(merchant_id=merchant_id, session=session)
 
+    inv_data = state.get("investigation_data", {})
+    calc_input = {
+        "transaction_ids": inv_data.get("transaction_ids", []),
+        "settlement_entry_ids": inv_data.get("settlement_entry_ids", []),
+    }
+
     # Call calculate_discrepancy tool
-    _, trace = await wrapper.execute_tool(
+    out_calc, trace = await wrapper.execute_tool(
         tool_name="calculate_discrepancy",
-        raw_input={"record_ids": ["TXN-001"]},
+        raw_input=calc_input,
         tool_context=ctx,
         agent_run_id=state["run_id"],
     )
 
-    # Deterministic calculation corresponding to demo scenario
-    expected_net = Decimal("15000.00")
-    observed_net = Decimal("9000.00")
-    discrepancy = expected_net - observed_net
-    reason_code = "OVERDUE"
+    if out_calc is not None:
+        expected_net = getattr(out_calc, "expected_net", Decimal("15000.00"))
+        observed_net = getattr(out_calc, "observed", Decimal("9000.00"))
+        discrepancy = getattr(out_calc, "discrepancy", expected_net - observed_net)
+        reason_code = getattr(out_calc, "reason_code", "OVERDUE")
+        trace_data = getattr(out_calc, "trace", {})
+        source_ids = getattr(out_calc, "source_ids", [])
+    else:
+        expected_net = Decimal("15000.00")
+        observed_net = Decimal("9000.00")
+        discrepancy = expected_net - observed_net
+        reason_code = "OVERDUE"
+        trace_data = {}
+        source_ids = []
 
     summary = {
         "expected_net": str(expected_net),
         "observed_net": str(observed_net),
+        "observed": str(observed_net),
         "discrepancy": str(discrepancy),
         "reason_code": reason_code,
         "source_type": "SYNTHETIC_DEMO",
+        "trace": trace_data,
+        "source_ids": source_ids,
     }
 
     return {
@@ -228,7 +284,22 @@ async def prepare_evidence_summary(
 ) -> dict[str, Any]:
     """Node: packages deterministic evidence for policy evaluation."""
     recon = state.get("reconciliation_summary", {})
+    inv_data = state.get("investigation_data", {})
+
+    evidence_summary = {
+        "expected_net": recon.get("expected_net", "15000.00"),
+        "observed_net": recon.get("observed_net", "9000.00"),
+        "discrepancy": recon.get("discrepancy", "6000.00"),
+        "reason_code": recon.get("reason_code", "OVERDUE"),
+        "source_type": recon.get("source_type", "SYNTHETIC_DEMO"),
+        "records_checked": recon.get("source_ids", inv_data.get("transaction_ids", [])),
+        "calculation_trace": recon.get("trace", {}),
+        "limitations": "Simulated bank settlement pending processing",
+        "next_action": "Supervisor approval required for settlement re-sync exceeding threshold",
+    }
+
     return {
+        "evidence_summary": evidence_summary,
         "trace_events": state.get("trace_events", [])
         + [
             {
@@ -236,6 +307,7 @@ async def prepare_evidence_summary(
                 "status": "SUCCESS",
                 "discrepancy": recon.get("discrepancy", "0.00"),
                 "reason_code": recon.get("reason_code", "UNKNOWN"),
+                "source_ids_count": len(recon.get("source_ids", [])),
             }
         ],
     }
