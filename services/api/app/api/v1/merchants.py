@@ -29,16 +29,18 @@ async def get_merchant(
     if auth.role == "MERCHANT" and merchant_id != auth.active_merchant_id:
         raise ForbiddenError("Access to merchant data outside session scope is forbidden")
 
-    # Call ScopedRepository stub with fallback
     merchant = None
     try:
         # TODO(core): ScopedRepository.get_merchant (P2-C3)
-        merchant = await scoped_repo.get_merchant()
+        target_repo = scoped_repo
+        if auth.role in ("SUPERVISOR", "SUPPORT_AGENT") and merchant_id != auth.active_merchant_id:
+            target_repo = ScopedRepository(session=session, merchant_id=merchant_id)
+        merchant = await target_repo.get_merchant()
     except NotImplementedError:
         stmt = select(Merchant).where(Merchant.id == merchant_id)
         merchant = (await session.execute(stmt)).scalar_one_or_none()
 
-    if not merchant:
+    if not merchant or merchant.id != merchant_id:
         # If in demo mode and merchant_id matches, return demo profile
         if merchant_id == auth.active_merchant_id:
             return success_response(
