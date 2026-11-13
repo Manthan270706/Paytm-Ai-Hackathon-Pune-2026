@@ -4,84 +4,99 @@
 **Event:** Paytm Build for India AI Hackathon – Pune Finale  
 **Track:** Track 3: Autonomous AI Teammates  
 **Date:** 15 November 2026  
-**Venue:** Partex.AI, Midas Tower, Hinjawadi, Pune  
+**Venue:** Partex.AI, Midas Tower, Rajiv Gandhi Infotech Park, Hinjawadi, Pune  
 
-*Don't just respond. Investigate. Act. Coordinate. Verify.*
-
----
-
-## 1. Overview
-
-**OpsSaathi AI** is an autonomous operations teammate designed for the Paytm merchant ecosystem. Rather than acting as a standard FAQ chatbot, OpsSaathi investigates missing payments, performs deterministic `Decimal` reconciliation, enforces policy approvals via LangGraph checkpoints, executes cross-system settlement re-sync requests, and independently verifies the final resolution through a dedicated read-only database role.
-
-### Key Capabilities
-- **Multi-Modal Intake:** English, Hindi, and Marathi voice & chat intake with shared session memory.
-- **Deterministic Reconciliation:** Core financial math uses `Decimal` (never hallucinated by an LLM).
-- **Human-in-the-Loop Policy Gate:** High-value or risky actions require explicit approval from a Support Lead.
-- **Independent Verification:** A ticket cannot reach `RESOLVED` without a fresh backend verification `PASS` by the `opssaathi_verifier` read-only role.
-- **Auditable Provenance:** Every financial record is explicitly tagged as `PAYTM_STAGING` or `SYNTHETIC_DEMO`.
+*“Don't just respond. Investigate. Act. Coordinate. Verify.”*
 
 ---
 
-## 2. Architecture
+## 1. Executive Summary
+
+**OpsSaathi AI** is a production-grade autonomous operations teammate designed for the Paytm merchant ecosystem. Rather than acting as a generic conversational chatbot, OpsSaathi functions as an active operations teammate that:
+1. **Investigates** missing payments and overdue settlement batches across disparate systems.
+2. **Reconciles** discrepancies with deterministic Python `Decimal` math (zero LLM math hallucination).
+3. **Enforces Policy Gates** by placing high-value or risky actions (e.g. re-sync > ₹5,000 threshold) into LangGraph checkpoints awaiting human supervisor authorization.
+4. **Coordinates Across Roles** via dual interfaces: a mobile-first merchant view (vernacular voice & chat) and the Paytm Operations Support Console.
+5. **Independently Verifies** resolutions using a dedicated read-only database role (`opssaathi_verifier`), strictly blocking premature ticket closure until fresh ledger reads confirm a zero discrepancy.
+
+---
+
+## 2. Key Trust Rules & Invariants (PRD §4)
+
+- **Zero Float Money:** All financial calculations strictly use `Decimal` with 2 decimal places. Floating-point arithmetic is forbidden and enforced by CI guard scripts (`scripts/guard.py`).
+- **Explicit Provenance:** Every financial record, card, and metric explicitly displays its origin (`PAYTM_STAGING` vs `SYNTHETIC_DEMO`). Data sources are never silently merged.
+- **Human-in-the-Loop Governance:** Autonomous settlement re-sync requests exceeding ₹5,000.00 require cryptographic human approval (case version check and SHA-256 action hash).
+- **Independent Read-Only Verification:** Cases cannot be resolved on the agent's own claim. Resolution requires a fresh read by the `opssaathi_verifier` role (`PRAGMA query_only=ON`).
+- **Channel & Context Continuity:** Full conversation context and active case state persist seamlessly across English, Hindi, and Marathi chat and voice turns.
+- **Tenant Isolation & Security:** All data access is strictly bounded by `ScopedRepository(merchant_id)`. Zero cross-merchant IDOR. Sensitive payment data (PAN, CVV, OTP, PIN) is masked before logging.
+
+---
+
+## 3. System Architecture
 
 ```
-  [ Merchant: Chat / Voice ]                [ Paytm Support Operations ]
-              │                                          │
-              ▼                                          ▼
-   React + Vite + TypeScript               Support & Ops Console
-   (Mobile Merchant UI)                    (Approvals & Audit Events)
-              │                                          │
-              └────────────────────┬─────────────────────┘
-                                   │ HTTPS REST + SSE Live Trace
-                                   ▼
-                       FastAPI Backend Service
-               (Auth, RBAC, ScopedRepository, Redaction)
-                                   │
-                                   ▼
+   [ Merchant: Mobile Web UI ]             [ Paytm Operations Console ]
+         (Voice / Chat)                         (Supervisor Review)
+               │                                         │
+               ▼                                         ▼
+      React 18 + Vite + Tailwind CSS (TypeScript, Lucide Icons, Mobile-First)
+               │                                         │
+               └────────────────────┬────────────────────┘
+                                    │ HTTPS REST + SSE Live Trace
+                                    ▼
+                         FastAPI Backend Service
+               • ScopedRepository (Tenant Isolation & Anti-IDOR)
+               • Request ID Tracing & In-Memory Rate Limiting
+               • Sensitive Data Masking (Card PAN, CVV, OTP, PIN)
+                                    │
+                                    ▼
                      LangGraph Supervisor Workflow
-        (Intake -> Investigate -> Reconcile -> Policy -> Action -> Verify)
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-          PostgreSQL Database           Integration Adapters
-     • Scoped Merchant Records       • Paytm Staging API / Webhooks
-     • Synthetic Settlement Ledger   • Gemini API (LLM)
-     • Cases, Versioning, Audits     • Sarvam AI (Indian Voice STT/TTS)
-     • Read-Only Verifier Role       • Mock Settlement Ops Adapter
+        ┌─────────────────────────────────────────────────────────┐
+        │ Intake ──> Investigate ──> Reconcile ──> Policy Gate   │
+        │                                                │        │
+        │ Resolved <── Verify <── Action Execution <── Human OK  │
+        └─────────────────────────────────────────────────────────┘
+                                    │
+                     ┌──────────────┴──────────────┐
+                     ▼                             ▼
+           PostgreSQL / SQLite            Integration Adapters
+        • Support Cases & Timeline     • Paytm Staging API / Webhooks
+        • Resync Requests & Idemp Keys • Gemini 1.5 Flash (Structured LLM)
+        • Read-Only Verifier Role      • Sarvam AI (Indian STT/TTS)
+        • Append-Only Audit Ledger     • Mock Settlement Ops Provider
 ```
 
 ---
 
-## 3. Quick Start
+## 4. Quick Start & Setup
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 20+
-- Docker & Docker Compose (optional for local zero-Docker run)
+- Docker & Docker Compose (optional for local zero-Docker development)
 
 ### Running with Docker Compose
 ```bash
-# 1. Clone & copy environment configuration
+# 1. Clone repository and initialize environment variables
 cp .env.example .env
 
-# 2. Start PostgreSQL, API, and Frontend
+# 2. Build and launch all services (PostgreSQL, FastAPI API, Vite Frontend)
 docker compose -f infra/docker-compose.yml up --build
 
-# 3. Access applications
-# Web UI:     http://localhost:5173
-# FastAPI:    http://localhost:8000/docs
-# Health API: http://localhost:8000/api/v1/health
+# 3. Access applications:
+#    - Merchant Web & Ops Console: http://localhost:5173
+#    - FastAPI OpenAPI Swagger:    http://localhost:8000/docs
+#    - Health & Diagnostics API:   http://localhost:8000/api/v1/health
 ```
 
 ### Running Locally (Without Docker)
 ```bash
-# Backend (FastAPI)
+# 1. Backend Service (FastAPI)
 cd services/api
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
-# Frontend (React + Vite)
+# 2. Frontend Application (React + Vite)
 cd apps/web
 npm install
 npm run dev
@@ -89,9 +104,56 @@ npm run dev
 
 ---
 
-## 4. Frozen Seed Scenario (Golden Path)
-- **Merchant:** Ramesh Kirana Store
-- **Eligible Captures:** ₹15,000.00
-- **Observed in Ledger:** ₹9,000.00
-- **Discrepancy:** ₹6,000.00 (`OVERDUE`)
-- **Policy Threshold:** ₹5,000.00 (triggers human approval checkpoint)
+## 5. Verification & Test Suite
+
+The repository includes a comprehensive, automated multi-layer test suite:
+
+```bash
+# 1. Repository Safety & Integrity Guard
+python scripts/guard.py
+
+# 2. Full Backend Pytest Suite (157 unit, integration, and security tests)
+python -m pytest services/api/app/tests
+
+# 3. PRD §14 Failure Drills Automated Runner (12 failure scenarios)
+python scripts/run_failure_drills.py
+
+# 4. Playwright End-to-End Automation (runs full golden path twice from clean reset)
+cd apps/web && npm run test:e2e
+```
+
+### Test Coverage Highlights
+- **`test_p5_a2_api_resilience.py`:** Comprehensive API error tests (400, 401, 403, 404, 409, 429, 503), optimistic concurrency, and duplicate webhook deduplication.
+- **`test_p4_a9_failure_drills.py`:** Verifies all 12 reliability drills in PRD §14 (LLM timeout, invalid structure, Sarvam down, Paytm staging down, DB outage, worker race, etc.).
+- **`golden_run.spec.ts`:** Full browser E2E test verifying complaint intake, vernacular switch, policy gate, supervisor approval, simulated credit, independent verification, and resolution.
+
+---
+
+## 6. Frozen Seed Scenario (Golden Path)
+
+- **Merchant:** Ramesh Kirana Store (`MERCHANT_ID = 11111111-1111-1111-1111-111111111111`)
+- **Eligible Payment Captures:** ₹15,000.00 (3 captures: ₹5,000 + ₹4,000 + ₹6,000)
+- **Observed in Settlement Ledger:** ₹9,000.00 (`SYNTHETIC_DEMO`)
+- **Calculated Discrepancy:** ₹6,000.00 (`OVERDUE`)
+- **Policy Gate Threshold:** ₹5,000.00 (triggers human approval requirement)
+- **Resolution:** Supervisor approves re-sync; bank settlement credited (+₹6,000); read-only verifier confirms ₹15,000 observed; case resolved.
+
+---
+
+## 7. Honest Disclosures & Simulation Boundaries
+
+In compliance with PRD §15 and Appendix C, all simulated parts are explicitly disclosed:
+1. **Settlement Ledger (`SYNTHETIC_DEMO`):** The official Paytm Settlement API is production-only (not hosted on staging). We simulate settlement batches with strict schema fidelity.
+2. **Settlement Ops Adapter (`MOCK_SETTLEMENT_OPS`):** Simulates internal Paytm operations fulfillment queues.
+3. **Voice Interface:** Uses in-app WebRTC / Audio streaming via the Sarvam AI REST API (not outbound PSTN telephony).
+4. **Replay Mode:** Cached deterministic completions at temperature 0 ensure rock-solid resilience during hackathon judging even if venue Wi-Fi drops.
+5. **Independent Entry:** Built by Team Two Bits for the Paytm Build for India AI Hackathon 2026. No claim of official Paytm endorsement.
+
+---
+
+## 8. Documentation Reference
+
+- [**PITCH_DECK.md**](file:///docs/PITCH_DECK.md): Slide-by-slide judging presentation and architecture walkthrough.
+- [**DEMO_RUNBOOK.md**](file:///docs/DEMO_RUNBOOK.md): Minute-by-minute 4-5 minute demo walkthrough script with emergency fallbacks.
+- [**BUILD_PLAN.md**](file:///docs/BUILD_PLAN.md): Complete phase-by-phase implementation schedule and milestone gates.
+- [**PRD.md**](file:///docs/PRD.md): Product Requirements Document and specifications.
