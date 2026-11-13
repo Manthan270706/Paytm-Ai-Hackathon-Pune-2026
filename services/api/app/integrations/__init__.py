@@ -10,6 +10,10 @@ from app.integrations.base import (
     TextToSpeech,
     TransactionStatusResult,
 )
+from app.integrations.gemini.provider import (
+    FallbackLLMProvider,
+    GeminiLLMProvider,
+)
 from app.integrations.mock import (
     MockLLMProvider,
     MockPaymentProvider,
@@ -29,6 +33,8 @@ __all__ = [
     "TransactionStatusResult",
     "SettlementEntryResult",
     "ResyncResult",
+    "GeminiLLMProvider",
+    "FallbackLLMProvider",
     "MockLLMProvider",
     "MockSpeechToText",
     "MockTextToSpeech",
@@ -48,8 +54,9 @@ def get_llm_provider(name: str | None = None) -> LLMProvider:
     provider_name = (name or settings.LLM_PROVIDER).lower()
     if provider_name == "mock":
         return MockLLMProvider()
-    # Live adapters can be plugged in Phase 3/4; default to mock if requested or fallback
-    return MockLLMProvider()
+    if provider_name == "gemini_direct":
+        return GeminiLLMProvider()
+    return FallbackLLMProvider()
 
 
 def get_stt_provider(name: str | None = None) -> SpeechToText:

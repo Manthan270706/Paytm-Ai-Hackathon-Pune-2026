@@ -32,6 +32,7 @@ class MockLLMProvider(LLMProvider):
         schema: type[T],
         system_prompt: str | None = None,
         temperature: float = 0.0,
+        session: Any | None = None,
     ) -> T:
         # If a canned response matches the schema, instantiate it
         schema_name = schema.__name__

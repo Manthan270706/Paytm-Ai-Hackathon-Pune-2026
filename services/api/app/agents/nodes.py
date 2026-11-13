@@ -10,6 +10,11 @@ from app.agents.state import AgentState
 from app.agents.wrapper import ToolExecutionWrapper
 from app.core.redaction import redact
 from app.domain.policy import evaluate as evaluate_policy_domain
+from app.integrations import get_llm_provider
+from app.integrations.gemini.schemas import (
+    EntityExtractionResult,
+    IntentClassificationResult,
+)
 from app.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -81,22 +86,53 @@ async def collect_issue(state: AgentState, config: RunnableConfig | None = None)
     """Node: extracts mentioned entities like amounts, dates, or references."""
     text = state.get("sanitized_input", "")
     extracted: dict[str, Any] = {}
+    is_replay = False
+    llm_source = "MOCK"
 
-    # Extract INR amount
-    amount_match = re.search(
-        r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{2})?)", text, re.IGNORECASE
-    )
-    if amount_match:
-        try:
-            val_str = amount_match.group(1).replace(",", "")
-            extracted["amount"] = str(Decimal(val_str))
-        except Exception:
-            pass
+    configurable = (config or {}).get("configurable", {})
+    session = configurable.get("session")
 
-    # Extract order / transaction / batch reference if present
-    ref_match = re.search(r"\b((?:TXN|ORDER|BATCH)[-_A-Za-z0-9]+)\b", text, re.IGNORECASE)
-    if ref_match:
-        extracted["reference"] = ref_match.group(1).upper()
+    # 1. Structured LLM Extraction (with fallback chain: Gemini -> Cache -> Mock)
+    try:
+        llm = get_llm_provider()
+        extraction_res: EntityExtractionResult = await llm.generate_structured(
+            prompt=f"Extract payment amount and reference code from merchant complaint:\n{text}",
+            schema=EntityExtractionResult,
+            system_prompt=(
+                "Extract INR amounts and references (TXN/ORDER/BATCH). Never invent values."
+            ),
+            session=session,
+        )
+        if extraction_res.amount:
+            try:
+                extracted["amount"] = str(Decimal(extraction_res.amount))
+            except Exception:
+                pass
+        if extraction_res.reference:
+            extracted["reference"] = extraction_res.reference
+        if extraction_res.category:
+            extracted["category"] = extraction_res.category
+        is_replay = getattr(llm, "last_was_replay", False)
+        llm_source = getattr(llm, "last_served_from", "MOCK")
+    except Exception as e:
+        logger.debug(f"LLM extraction fallback: {e}")
+
+    # 2. Deterministic Regex Fallback/Augmentation (ensures Trust Rule 2)
+    if "amount" not in extracted:
+        amount_match = re.search(
+            r"(?:₹|rs\.?|inr)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{2})?)", text, re.IGNORECASE
+        )
+        if amount_match:
+            try:
+                val_str = amount_match.group(1).replace(",", "")
+                extracted["amount"] = str(Decimal(val_str))
+            except Exception:
+                pass
+
+    if "reference" not in extracted:
+        ref_match = re.search(r"\b((?:TXN|ORDER|BATCH)[-_A-Za-z0-9]+)\b", text, re.IGNORECASE)
+        if ref_match:
+            extracted["reference"] = ref_match.group(1).upper()
 
     missing_fields = []
     if "amount" not in extracted and "reference" not in extracted:
@@ -105,34 +141,64 @@ async def collect_issue(state: AgentState, config: RunnableConfig | None = None)
     return {
         "extracted_entities": extracted,
         "missing_fields": missing_fields,
+        "is_replay": is_replay,
+        "llm_source": llm_source,
         "trace_events": state.get("trace_events", [])
         + [
             {
                 "node": "collect_issue",
                 "status": "SUCCESS",
                 "extracted": extracted,
+                "is_replay": is_replay,
+                "llm_source": llm_source,
             }
         ],
     }
 
 
 async def classify_issue(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
-    """Node: classifies merchant operational intent."""
-    text = state.get("sanitized_input", "").lower()
+    """Node: classifies merchant operational intent using LLM with fallback."""
+    text = state.get("sanitized_input", "")
     intent = "SETTLEMENT_MISMATCH"
-    if "refund" in text:
-        intent = "REFUND_INQUIRY"
-    elif "payout" in text or "delay" in text:
-        intent = "PAYOUT_DELAY"
+    is_replay = state.get("is_replay", False)
+    llm_source = state.get("llm_source", "MOCK")
+
+    configurable = (config or {}).get("configurable", {})
+    session = configurable.get("session")
+
+    try:
+        llm = get_llm_provider()
+        class_res: IntentClassificationResult = await llm.generate_structured(
+            prompt=f"Classify the merchant's operational intent:\n{text}",
+            schema=IntentClassificationResult,
+            system_prompt=(
+                "Classify intent as SETTLEMENT_MISMATCH, REFUND_INQUIRY, or PAYOUT_DELAY."
+            ),
+            session=session,
+        )
+        intent = class_res.intent
+        is_replay = is_replay or getattr(llm, "last_was_replay", False)
+        llm_source = getattr(llm, "last_served_from", llm_source)
+    except Exception as e:
+        logger.debug(f"LLM classification fallback: {e}")
+        text_lower = text.lower()
+        if "refund" in text_lower:
+            intent = "REFUND_INQUIRY"
+        elif "payout" in text_lower or "delay" in text_lower:
+            intent = "PAYOUT_DELAY"
 
     return {
         "intent": intent,
+        "is_replay": is_replay,
+        "llm_source": llm_source,
         "trace_events": state.get("trace_events", [])
         + [
             {
                 "node": "classify_issue",
                 "status": "SUCCESS",
                 "intent": intent,
+                "is_replay": is_replay,
+                "llm_source": llm_source,
             }
         ],
     }

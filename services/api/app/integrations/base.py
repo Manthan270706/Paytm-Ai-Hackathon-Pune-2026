@@ -54,6 +54,7 @@ class LLMProvider(ABC):
         schema: type[T],
         system_prompt: str | None = None,
         temperature: float = 0.0,
+        session: Any | None = None,
     ) -> T:
         """Generate structured Pydantic response from LLM."""
         pass

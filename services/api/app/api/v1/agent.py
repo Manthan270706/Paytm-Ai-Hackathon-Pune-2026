@@ -52,6 +52,8 @@ async def send_agent_message(
             intent=intent,
             active_case_id=active_case_id,
             evidence_summary=recon_summary,
+            is_replay=result_state.get("is_replay", False),
+            llm_source=result_state.get("llm_source", "SYNTHETIC_DEMO"),
         ).model_dump(),
         source_type="SYNTHETIC_DEMO",
     )

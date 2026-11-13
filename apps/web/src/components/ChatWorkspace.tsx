@@ -16,6 +16,7 @@ import {
   Check,
   X,
   Edit3,
+  RotateCcw,
 } from 'lucide-react'
 
 interface ChatWorkspaceProps {
@@ -30,6 +31,7 @@ interface ChatWorkspaceProps {
   currentLanguage: string
   activeConversationId: string | null
   onVoiceSessionInit?: () => void
+  isReplayMode?: boolean
 }
 
 export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
@@ -44,6 +46,7 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
   currentLanguage,
   activeConversationId,
   onVoiceSessionInit,
+  isReplayMode = false,
 }) => {
   const [inputText, setInputText] = useState('')
   const [isRecording, setIsRecording] = useState(false)
@@ -302,6 +305,15 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                   Voice Enabled
                 </span>
               )}
+              {isReplayMode && (
+                <span
+                  className="text-[10px] text-amber-300 font-semibold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
+                  title="Serving deterministic cached golden scenario (PRD §12.3 Replay Mode)"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  Replay Mode
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400">
               Disclosed AI Teammate • Autonomous resolution with verified truth
@@ -382,6 +394,14 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                       <div className="flex items-center gap-1 text-[10px] text-sky-200/90 mb-1 font-semibold">
                         <Mic className="h-3 w-3" />
                         <span>Voice Submission</span>
+                      </div>
+                    )}
+
+                    {/* Replay Cache Badge */}
+                    {msg.is_replay && (
+                      <div className="flex items-center gap-1 text-[10px] text-amber-300 font-semibold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full w-fit mb-1 shadow-sm">
+                        <RotateCcw className="h-2.5 w-2.5" />
+                        <span>Replay Cache</span>
                       </div>
                     )}
 

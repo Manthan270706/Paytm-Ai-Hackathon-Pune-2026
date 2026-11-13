@@ -117,6 +117,8 @@ class AgentMessageResponse(BaseModel):
     intent: str
     active_case_id: uuid.UUID | None = None
     evidence_summary: dict[str, Any] | None = None
+    is_replay: bool = False
+    llm_source: str = "SYNTHETIC_DEMO"
 
 
 # ------------------------------------------------------------------------------
@@ -148,6 +150,8 @@ class VoiceTranscriptionResponse(BaseModel):
     run_id: uuid.UUID | None = None
     active_case_id: uuid.UUID | None = None
     evidence_summary: dict[str, Any] | None = None
+    is_replay: bool = False
+    llm_source: str = "SYNTHETIC_DEMO"
 
 
 # ------------------------------------------------------------------------------
