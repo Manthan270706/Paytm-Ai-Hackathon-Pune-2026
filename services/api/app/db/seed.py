@@ -77,7 +77,7 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
     merchant_user = User(
         id=MERCHANT_USER_ID,
         email="merchant@two-bits.demo",
-        hashed_password="mock_hashed_password_demo123",
+        hashed_password="DEMO_HASH",
         role="MERCHANT",
         is_active=True,
         preferred_language="en",
@@ -85,7 +85,7 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
     support_user = User(
         id=SUPPORT_USER_ID,
         email="support@paytm.demo",
-        hashed_password="mock_hashed_password_demo123",
+        hashed_password="DEMO_HASH",
         role="SUPPORT_AGENT",
         is_active=True,
         preferred_language="en",
@@ -93,7 +93,7 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
     supervisor_user = User(
         id=SUPERVISOR_USER_ID,
         email="supervisor@paytm.demo",
-        hashed_password="mock_hashed_password_demo123",
+        hashed_password="DEMO_HASH",
         role="SUPERVISOR",
         is_active=True,
         preferred_language="en",
