@@ -123,11 +123,13 @@ async def run_agent_turn(
     user_msg.language = detected_lang
 
     reply_text = result_state.get("final_reply", "I have investigated your settlement records.")
+    clean_reply = redact(reply_text).clean_text
+    result_state["final_reply"] = clean_reply
     assistant_msg = Message(
         id=uuid.uuid4(),
         conversation_id=conv.id,
         role="ASSISTANT",
-        content=reply_text,
+        content=clean_reply,
         language=detected_lang,
         created_at=datetime.now(UTC),
     )

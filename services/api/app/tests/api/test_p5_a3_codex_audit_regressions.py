@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,7 +20,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.redaction import redact
-from app.db.models import AuditEvent, Message, SupportCase
+from app.db.models import AuditEvent, Conversation, Message, SupportCase
 from app.db.seed import MERCHANT_ID, reset_and_seed
 from app.main import app
 from app.tests.conftest import shared_session_factory
@@ -91,6 +92,24 @@ async def test_regression_2_webhook_demo_bypass_synthetic_demo_and_validation() 
             assert audit_entry is not None
             assert audit_entry.payload["source_type"] == "SYNTHETIC_DEMO"
             assert audit_entry.payload["demo_bypass"] is True
+
+        # While DEMO_DATA_MODE=True, invalid demo signatures must be rejected with 400
+        for bad_sig in [
+            "demo_invalid",
+            "demo_invalid_signature",
+            "demo_tampered",
+            "tampered_signature_xyz",
+        ]:
+            res_bad = client.post(
+                "/api/v1/webhooks/paytm",
+                json={
+                    **payload,
+                    "event_id": f"EVT-REGRESSION-{uuid.uuid4().hex[:8]}",
+                    "checksum": bad_sig,
+                },
+            )
+            assert res_bad.status_code == 400
+            assert "signature verification failed" in res_bad.json()["detail"].lower()
 
         # When DEMO_DATA_MODE=False: demo bypass signature fails with 400
         settings.DEMO_DATA_MODE = False
@@ -217,3 +236,104 @@ async def test_regression_5_agents_runner_uses_core_redaction_for_stored_message
         assert "[REDACTED_PIN]" in msg.content
         assert "[REDACTED_CVV]" in msg.content
         assert "[REDACTED_ACCOUNT]" in msg.content
+
+        # Verify ASSISTANT Message row in DB has also passed through core.redaction.redact
+        assistant_msg = (
+            await session.execute(
+                select(Message).where(
+                    Message.conversation_id == agent_run.conversation_id,
+                    Message.role == "ASSISTANT",
+                )
+            )
+        ).scalar_one()
+        assert assistant_msg.content == redact(assistant_msg.content).clean_text
+
+
+@pytest.mark.asyncio
+async def test_regression_5_voice_disclosure_stored_with_core_redaction() -> None:
+    """Voice session disclosure messages are stored using core.redaction.redact."""
+    res = client.post(
+        "/api/v1/voice/sessions",
+        json={"language": "en"},
+        headers=MERCHANT_TOKEN,
+    )
+    assert res.status_code == 200
+    conv_id = uuid.UUID(res.json()["data"]["conversation_id"])
+
+    async with shared_session_factory() as session:
+        disclosure_msg = (
+            await session.execute(
+                select(Message).where(
+                    Message.conversation_id == conv_id,
+                    Message.role == "SYSTEM",
+                )
+            )
+        ).scalar_one()
+        assert (
+            disclosure_msg.content
+            == redact(
+                "AI-identity disclosed: OpsSaathi AI operations teammate (voice session)"
+            ).clean_text
+        )
+
+
+@pytest.mark.asyncio
+async def test_regression_5_followup_worker_messages_stored_with_core_redaction() -> None:
+    """Follow-up worker messages are stored using core.redaction.redact."""
+    from app.db.seed import simulate_bank_settlement
+    from app.workers.followup import enqueue_followup_job, process_followup_job
+
+    async with shared_session_factory() as session:
+        await reset_and_seed(session)
+        now = datetime.now(UTC)
+        case_id = uuid.uuid4()
+        case = SupportCase(
+            id=case_id,
+            merchant_id=MERCHANT_ID,
+            case_number=f"CAS-{now.strftime('%Y%m%d')}-{case_id.hex[:4].upper()}",
+            category="SETTLEMENT_DELAY",
+            priority="P1",
+            status="AWAITING_APPROVAL",
+            queue="SETTLEMENT_OPS",
+            summary="Missing ₹6,000 from settlement batch BATCH_20261112_01",
+            idempotency_key=f"idem_{uuid.uuid4().hex}",
+            version=1,
+            created_at=now,
+        )
+        session.add(case)
+        await session.flush()
+
+        conv = Conversation(
+            id=uuid.uuid4(),
+            merchant_id=case.merchant_id,
+            channel="CHAT",
+            language="en",
+            active_case_id=case.id,
+            created_at=now,
+        )
+        session.add(conv)
+        await session.flush()
+
+        # Simulate settlement to resolve discrepancy and trigger meaningful change
+        await simulate_bank_settlement(session, merchant_id=case.merchant_id)
+
+        job = await enqueue_followup_job(session=session, case_id=case.id)
+        res = await process_followup_job(session=session, job=job)
+        assert res.meaningful_change is True
+        assert res.notification_sent is True
+
+        msgs = (
+            (
+                await session.execute(
+                    select(Message).where(
+                        Message.conversation_id == conv.id,
+                        Message.role == "ASSISTANT",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(msgs) >= 1
+        for m in msgs:
+            assert m.content == redact(m.content).clean_text

@@ -20,6 +20,7 @@ from app.api.v1.schemas import (
     VoiceTranscriptionResponse,
 )
 from app.core.dependencies import AuthContext, get_auth_context
+from app.core.redaction import redact
 from app.core.response import success_response
 from app.db.models import Conversation, Message
 from app.db.seed import MERCHANT_ID
@@ -43,10 +44,10 @@ async def create_voice_session(
     # Find or create conversation with VOICE channel
     if req.conversation_id:
         existing_conv = (
-            await session.execute(
-                select(Conversation).where(Conversation.id == conv_id)
-            )
-        ).scalars().first()
+            (await session.execute(select(Conversation).where(Conversation.id == conv_id)))
+            .scalars()
+            .first()
+        )
         if existing_conv and existing_conv.merchant_id != merchant_id:
             from app.core.exceptions import ForbiddenError
 
@@ -75,7 +76,9 @@ async def create_voice_session(
         id=uuid.uuid4(),
         conversation_id=conv.id,
         role="SYSTEM",
-        content="AI-identity disclosed: OpsSaathi AI operations teammate (voice session)",
+        content=redact(
+            "AI-identity disclosed: OpsSaathi AI operations teammate (voice session)"
+        ).clean_text,
         language=conv.language,
         created_at=now,
     )
@@ -84,19 +87,14 @@ async def create_voice_session(
 
     lang = req.language.lower() if req.language else "en"
     if lang == "hi":
-        welcome = (
-            "नमस्ते, मैं ऑप्ससाथी हूँ, आपका पेटीएम एआई ऑपरेशंस साथी। "
-            "मैं आज आपकी क्या सहायता कर सकता हूँ?"
-        )
+        welcome = "नमस्ते, मैं ऑप्ससाथी हूँ, आपका पेटीएम एआई ऑपरेशंस साथी। मैं आज आपकी क्या सहायता कर सकता हूँ?"
     elif lang == "mr":
         welcome = (
-            "नमस्ते, मी ऑप्ससाथी आहे, तुमचा पेटीएम एआय ऑपरेशन्स सहकारी. "
-            "मी आज आपल्याला कशी मदत करू शकतो?"
+            "नमस्ते, मी ऑप्ससाथी आहे, तुमचा पेटीएम एआय ऑपरेशन्स सहकारी. मी आज आपल्याला कशी मदत करू शकतो?"
         )
     else:
         welcome = (
-            "Namaste, I am OpsSaathi, your Paytm AI operations teammate. "
-            "How can I help you today?"
+            "Namaste, I am OpsSaathi, your Paytm AI operations teammate. How can I help you today?"
         )
 
     return success_response(
@@ -130,8 +128,8 @@ async def process_voice_transcription(
     reply = result_state.get("final_reply", "I have investigated your settlement records.")
     detected_lang = result_state.get("language", req.language)
     active_case_id = result_state.get("active_case_id")
-    recon_summary = (
-        result_state.get("evidence_summary") or result_state.get("reconciliation_summary")
+    recon_summary = result_state.get("evidence_summary") or result_state.get(
+        "reconciliation_summary"
     )
     await session.commit()
 

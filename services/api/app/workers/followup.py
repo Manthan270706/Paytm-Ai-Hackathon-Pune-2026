@@ -18,6 +18,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.redaction import redact
 from app.db.models import (
     CaseEvent,
     Conversation,
@@ -64,9 +65,7 @@ async def enqueue_followup_job(
     session.add(job)
 
     case_stmt = (
-        update(SupportCase)
-        .where(SupportCase.id == case_id)
-        .values(followup_at=scheduled_at)
+        update(SupportCase).where(SupportCase.id == case_id).values(followup_at=scheduled_at)
     )
     await session.execute(case_stmt)
     await session.commit()
@@ -202,14 +201,10 @@ async def process_followup_job(
 
     # Fetch recent case events to check previous notifications
     events_stmt = (
-        select(CaseEvent)
-        .where(CaseEvent.case_id == case.id)
-        .order_by(CaseEvent.created_at.desc())
+        select(CaseEvent).where(CaseEvent.case_id == case.id).order_by(CaseEvent.created_at.desc())
     )
     events = list((await session.execute(events_stmt)).scalars().all())
-    already_notified = any(
-        e.event_type == "FOLLOWUP_STATUS_UPDATE" for e in events
-    )
+    already_notified = any(e.event_type == "FOLLOWUP_STATUS_UPDATE" for e in events)
 
     meaningful_change = False
     change_summary = ""
@@ -283,7 +278,7 @@ async def process_followup_job(
                 id=uuid.uuid4(),
                 conversation_id=conv.id,
                 role="ASSISTANT",
-                content=msg_content,
+                content=redact(msg_content).clean_text,
                 language=lang,
                 created_at=check_time,
             )

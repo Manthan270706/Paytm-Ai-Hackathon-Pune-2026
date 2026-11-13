@@ -53,12 +53,7 @@ async def receive_paytm_webhook(
     )
 
     # Extract signature (Header, CHECKSUMHASH, or checksum field)
-    signature = str(
-        x_paytm_signature
-        or params.get("CHECKSUMHASH")
-        or params.get("checksum")
-        or ""
-    )
+    signature = str(x_paytm_signature or params.get("CHECKSUMHASH") or params.get("checksum") or "")
 
     # 1. Signature Verification per PRD §13 and P4-C1 (always execute cryptographic validation)
     merchant_key = settings.PAYTM_MERCHANT_KEY or ""
@@ -67,10 +62,10 @@ async def receive_paytm_webhook(
     is_demo_bypass = False
     # Demo mode fallback for seeded integration tests ONLY when DEMO_DATA_MODE is explicitly True
     if not is_valid and settings.DEMO_DATA_MODE:
-        if (
-            signature in {"mock_checksum_abc123", "demo_valid_signature"}
-            or signature.startswith("demo_")
-        ):
+        if not merchant_key and validate_paytm_checksum(raw_bytes, signature, "0123456789abcdef"):
+            is_valid = True
+            is_demo_bypass = True
+        elif signature in {"mock_checksum_abc123", "demo_valid_signature"}:
             is_valid = True
             is_demo_bypass = True
 
