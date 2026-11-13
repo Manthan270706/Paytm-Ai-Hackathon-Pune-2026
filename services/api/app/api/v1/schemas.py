@@ -182,8 +182,20 @@ class CaseItemResponse(BaseModel):
     updated_at: datetime
 
 
+class ApprovalSummaryResponse(BaseModel):
+    id: uuid.UUID
+    action: str
+    action_hash: str
+    status: str
+    decision: str
+    case_version: int
+    created_at: datetime
+    reason: str | None = None
+
+
 class CaseDetailResponse(CaseItemResponse):
     timeline: list[CaseEventResponse] = []
+    pending_approval: ApprovalSummaryResponse | None = None
 
 
 class CaseApproveRequest(BaseModel):

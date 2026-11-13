@@ -8,6 +8,8 @@ import {
   ChatMessage,
   TraceEvent,
   DiscrepancySummary,
+  CaseDetail,
+  VerificationResult,
 } from './types/api'
 import { Header } from './components/Header'
 import { MerchantDashboard } from './components/MerchantDashboard'
@@ -29,6 +31,8 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [evidenceSummary, setEvidenceSummary] = useState<DiscrepancySummary | null>(null)
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null)
+  const [activeCaseDetail, setActiveCaseDetail] = useState<CaseDetail | null>(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false)
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [isTraceOpen, setIsTraceOpen] = useState(false)
@@ -38,7 +42,7 @@ export default function App() {
   const [isSending, setIsSending] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false)
-  const [verificationResult, setVerificationResult] = useState<any | null>(null)
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null)
 
   const token =
     currentRole === 'MERCHANT'
@@ -82,7 +86,14 @@ export default function App() {
       const caseRes = await fetch(`${API_BASE}/cases`, { headers })
       if (caseRes.ok) {
         const cData = await caseRes.json()
-        setCases(cData.data?.items || [])
+        const fetchedCases = cData.data?.items || []
+        setCases(fetchedCases)
+        if (fetchedCases.length > 0) {
+          const targetId = activeCaseId && fetchedCases.some((c: any) => c.id === activeCaseId)
+            ? activeCaseId
+            : fetchedCases[0].id
+          loadCaseDetail(targetId)
+        }
       }
 
       setError(null)
@@ -90,6 +101,23 @@ export default function App() {
       setError(err.message || 'Failed to connect to OpsSaathi API')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch full case details and timeline
+  const loadCaseDetail = async (caseId: string) => {
+    try {
+      setIsLoadingDetail(true)
+      const headers = { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${API_BASE}/cases/${caseId}`, { headers })
+      if (res.ok) {
+        const dData = await res.json()
+        setActiveCaseDetail(dData.data)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsLoadingDetail(false)
     }
   }
 
@@ -197,6 +225,7 @@ export default function App() {
         setTraceEvents([])
         setEvidenceSummary(null)
         setActiveCaseId(null)
+        setActiveCaseDetail(null)
         setVerificationResult(null)
         await loadDashboardData()
       }
@@ -214,10 +243,13 @@ export default function App() {
       const res = await fetch(`${API_BASE}/demo/simulate-settlement`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: '6000.00', batch_ref: 'BATCH_01' }),
+        body: JSON.stringify({ amount: '6000.00', batch_ref: 'BATCH_20261112_01' }),
       })
       if (res.ok) {
         await loadDashboardData()
+        if (activeCaseDetail?.id) {
+          await loadCaseDetail(activeCaseDetail.id)
+        }
       }
     } catch (err) {
       console.error(err)
@@ -227,7 +259,11 @@ export default function App() {
   }
 
   // Approve case
-  const handleApproveCase = async (caseId: string, version: number) => {
+  const handleApproveCase = async (
+    caseId: string,
+    version: number,
+    actionHash: string
+  ) => {
     try {
       const res = await fetch(`${API_BASE}/cases/${caseId}/approve`, {
         method: 'POST',
@@ -237,11 +273,14 @@ export default function App() {
         },
         body: JSON.stringify({
           expected_version: version,
-          action_hash: 'hash_resync_batch_01',
+          action_hash:
+            actionHash ||
+            '44efa879046efa3a441c61673e778f5ed3cb2adec16c9d57ca0f88b6139a2e02',
         }),
       })
       if (res.ok) {
         await loadDashboardData()
+        await loadCaseDetail(caseId)
       }
     } catch (err) {
       console.error(err)
@@ -249,7 +288,12 @@ export default function App() {
   }
 
   // Reject case
-  const handleRejectCase = async (caseId: string, version: number) => {
+  const handleRejectCase = async (
+    caseId: string,
+    version: number,
+    actionHash: string,
+    reason: string
+  ) => {
     try {
       const res = await fetch(`${API_BASE}/cases/${caseId}/reject`, {
         method: 'POST',
@@ -259,12 +303,38 @@ export default function App() {
         },
         body: JSON.stringify({
           expected_version: version,
-          action_hash: 'hash_resync_batch_01',
-          reason: 'Manual inspection required',
+          action_hash:
+            actionHash ||
+            '44efa879046efa3a441c61673e778f5ed3cb2adec16c9d57ca0f88b6139a2e02',
+          reason: reason || 'Manual inspection required',
         }),
       })
       if (res.ok) {
         await loadDashboardData()
+        await loadCaseDetail(caseId)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Assign case
+  const handleAssignCase = async (caseId: string, version: number, queue: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          expected_version: version,
+          queue,
+        }),
+      })
+      if (res.ok) {
+        await loadDashboardData()
+        await loadCaseDetail(caseId)
       }
     } catch (err) {
       console.error(err)
@@ -281,6 +351,7 @@ export default function App() {
         const data = await res.json()
         setVerificationResult(data.data)
         await loadDashboardData()
+        await loadCaseDetail(caseId)
       }
     } catch (err) {
       console.error(err)
@@ -332,10 +403,17 @@ export default function App() {
             cases={cases}
             onApproveCase={handleApproveCase}
             onRejectCase={handleRejectCase}
+            onAssignCase={handleAssignCase}
             onSimulateSettlement={handleSimulateSettlement}
             onVerifyCase={handleVerifyCase}
             isSimulating={isSimulating}
             verificationResult={verificationResult}
+            activeCaseDetail={activeCaseDetail}
+            onSelectCase={(id) => {
+              setActiveCaseId(id)
+              loadCaseDetail(id)
+            }}
+            isLoadingDetail={isLoadingDetail}
           />
         )}
       </main>

@@ -94,3 +94,42 @@ export interface DiscrepancySummary {
   limitations?: string
   next_action?: string
 }
+
+export interface CaseEvent {
+  id: string
+  actor: string
+  event_type: string
+  from_status: string | null
+  to_status: string | null
+  visibility: 'INTERNAL' | 'MERCHANT' | string
+  payload?: Record<string, any> | null
+  created_at: string
+}
+
+export interface ApprovalSummary {
+  id: string
+  action: string
+  action_hash: string
+  status: string
+  decision: string
+  case_version: number
+  created_at: string
+  reason?: string | null
+}
+
+export interface CaseDetail extends SupportCaseItem {
+  timeline: CaseEvent[]
+  pending_approval?: ApprovalSummary | null
+}
+
+export interface VerificationResult {
+  case_id: string
+  status: string
+  verification_result: 'PASS' | 'FAIL'
+  before_observed: string
+  after_observed: string
+  expected_net: string
+  evidence_timestamp: string
+  verifier_role?: string
+}
+
