@@ -28,6 +28,7 @@ from app.db.session import get_db_session, get_verifier_db
 from app.domain.approvals import validate_resume
 from app.domain.case_lifecycle import transition
 from app.domain.verification import verify_resolution
+from app.workers.followup import run_followup_for_case
 
 router = APIRouter()
 
@@ -645,13 +646,24 @@ async def resolve_case(
 
 
 @router.post("/cases/{case_id}/followup/run", summary="Manual follow-up worker trigger")
-async def run_case_followup(case_id: uuid.UUID) -> dict:
+async def run_case_followup(
+    case_id: uuid.UUID,
+    auth: Annotated[AuthContext, Depends(get_auth_context)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict:
+    if auth.role.upper() == "MERCHANT":
+        raise ForbiddenError("Only support or supervisor roles can trigger follow-up jobs")
+
+    result = await run_followup_for_case(session=session, case_id=case_id)
     return success_response(
         data={
             "case_id": case_id,
-            "job_status": "COMPLETED",
-            "notification_sent": True,
-            "message": "Follow-up check executed: status updated for merchant.",
+            "job_id": result.job_id,
+            "job_status": result.status,
+            "meaningful_change": result.meaningful_change,
+            "notification_sent": result.notification_sent,
+            "message": result.message,
+            "details": result.details,
         },
         source_type="SYNTHETIC_DEMO",
     )
