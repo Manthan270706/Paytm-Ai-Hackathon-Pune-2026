@@ -38,5 +38,7 @@ rate_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
 
 
 async def check_rate_limit(request: Request) -> None:
-    client_host = request.client.host if request.client else "unknown"
+    client_host = request.headers.get("X-Forwarded-For") or (
+        request.client.host if request.client else "unknown"
+    )
     rate_limiter.check(client_host)

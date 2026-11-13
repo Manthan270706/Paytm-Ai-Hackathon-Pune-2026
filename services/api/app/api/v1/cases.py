@@ -183,36 +183,7 @@ async def get_case(
     case = (await session.execute(stmt)).scalar_one_or_none()
 
     if not case:
-        # Fallback for synthetic unit test
-        now = datetime.now(UTC)
-        return success_response(
-            data=CaseDetailResponse(
-                id=case_id,
-                merchant_id=auth.active_merchant_id,
-                case_number="CASE-2026-1024",
-                category="SETTLEMENT_MISMATCH",
-                priority="P1",
-                status="AWAITING_APPROVAL",
-                queue="SETTLEMENT_OPS",
-                summary="Missing ₹6,000 from settlement batch BATCH_20261112_01",
-                version=1,
-                created_at=now,
-                updated_at=now,
-                timeline=[
-                    CaseEventResponse(
-                        id=uuid.uuid4(),
-                        actor="OpsSaathi AI",
-                        event_type="CASE_CREATED",
-                        from_status=None,
-                        to_status="NEW",
-                        visibility="MERCHANT",
-                        payload={"category": "SETTLEMENT_MISMATCH"},
-                        created_at=now,
-                    )
-                ],
-            ).model_dump(),
-            source_type="SYNTHETIC_DEMO",
-        )
+        raise NotFoundError(f"Case {case_id} not found")
 
     # Tenant Isolation: Merchant cannot view another merchant's case
     if auth.role == "MERCHANT" and case.merchant_id != auth.active_merchant_id:

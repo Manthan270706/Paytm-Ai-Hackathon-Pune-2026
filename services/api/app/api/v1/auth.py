@@ -1,14 +1,19 @@
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.v1.schemas import CurrentUserResponse, DemoLoginRequest, DemoLoginResponse
+from app.core.rate_limit import check_rate_limit
 from app.core.response import success_response
 
 router = APIRouter()
 
 
-@router.post("/auth/demo-login", summary="Start demo session")
+@router.post(
+    "/auth/demo-login",
+    summary="Start demo session",
+    dependencies=[Depends(check_rate_limit)],
+)
 async def demo_login(req: DemoLoginRequest) -> dict:
     mock_merchant_id = uuid.uuid4()
     mock_user_id = uuid.uuid4()
