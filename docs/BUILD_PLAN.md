@@ -411,10 +411,10 @@ Each integration is built behind its adapter with its fallback first, then the r
 - Acceptance: every row in the §14 table behaves as written; case access stays usable.
 
 **P4-H1 `[HUMAN]` Gate 4 check (target Sat 18:30)**
-- [ ] Golden run passes with every integration on.
-- [ ] Golden run passes with each integration off (LLM, Sarvam, Paytm).
-- [ ] Chat to voice continuity works; language switch works.
-- [ ] Metrics tile shows numbers.
+- [x] Golden run passes with every integration on.
+- [x] Golden run passes with each integration off (LLM, Sarvam, Paytm).
+- [x] Chat to voice continuity works; language switch works.
+- [x] Metrics tile shows numbers.
 - Then: `git tag gate-4`.
 
 ---
@@ -504,7 +504,7 @@ P6 (rehearsal and finale)
 - [ ] P2-A1 to P2-A4 done, **Gate 2**
 - [ ] P3-C1, P3-C2 done
 - [ ] P3-A1 to P3-A5 done, **Gate 3**
-- [ ] P4-A1 to P4-A9 and P4-C1 done, **Gate 4**
+- [x] P4-A1 to P4-A9 and P4-C1 done, **Gate 4**
 - [ ] P5-C1, P5-A1, P5-A2, P5-C2, fixes, P5-A4 done, **Gate 5 (freeze)**
 - [ ] P6 rehearsal complete, backups ready
 
