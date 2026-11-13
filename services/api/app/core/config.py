@@ -4,11 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     APP_ENV: str = "development"
     FRONTEND_ORIGIN: str = "http://localhost:5173"
@@ -16,7 +12,9 @@ class Settings(BaseSettings):
 
     # Databases
     DATABASE_URL: str = "postgresql+psycopg://user:password@localhost:5432/opssaathi"
-    VERIFIER_DATABASE_URL: str = "postgresql+psycopg://verifier_ro:password@localhost:5432/opssaathi"
+    VERIFIER_DATABASE_URL: str = (
+        "postgresql+psycopg://verifier_ro:password@localhost:5432/opssaathi"
+    )
 
     # Providers
     LLM_PROVIDER: str = "gemini"

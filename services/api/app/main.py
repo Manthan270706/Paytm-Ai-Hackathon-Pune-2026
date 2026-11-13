@@ -12,7 +12,7 @@ app = FastAPI(
     description="Autonomous Merchant Operations Teammate for Paytm Merchants (Track 3)",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/api/v1/openapi.json"
+    openapi_url="/api/v1/openapi.json",
 )
 
 # CORS restriction
@@ -35,7 +35,7 @@ async def root() -> dict:
         "version": "1.1.0",
         "track": "Track 3: Autonomous AI Teammates",
         "docs": "/docs",
-        "health": "/api/v1/health"
+        "health": "/api/v1/health",
     }
 
 
@@ -46,6 +46,6 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         content=error_response(
             code="INTERNAL_SERVER_ERROR",
             message="An unexpected error occurred. Please try again or contact support.",
-            details=str(exc) if settings.APP_ENV == "development" else None
-        )
+            details=str(exc) if settings.APP_ENV == "development" else None,
+        ),
     )
