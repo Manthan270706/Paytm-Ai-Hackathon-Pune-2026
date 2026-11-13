@@ -215,6 +215,11 @@ class CaseAssignRequest(BaseModel):
     queue: str
 
 
+class CaseResolveRequest(BaseModel):
+    expected_version: int | None = None
+    reason: str | None = None
+
+
 class CaseVerifyResponse(BaseModel):
     case_id: uuid.UUID
     status: str
