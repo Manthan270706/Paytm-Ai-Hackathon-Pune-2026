@@ -69,6 +69,24 @@ export interface ChatMessage {
   content: string
   language: string
   created_at: string
+  channel?: 'CHAT' | 'VOICE'
+}
+
+export interface VoiceSessionData {
+  session_id: string
+  conversation_id: string
+  ai_identity_disclosed: boolean
+  welcome_message: string
+}
+
+export interface VoiceTranscriptionData {
+  conversation_id: string
+  reply_text: string
+  reply_audio_url?: string | null
+  language: string
+  run_id?: string | null
+  active_case_id?: string | null
+  evidence_summary?: DiscrepancySummary | null
 }
 
 export interface TraceEvent {
