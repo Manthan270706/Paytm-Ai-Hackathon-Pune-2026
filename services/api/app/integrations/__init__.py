@@ -22,6 +22,10 @@ from app.integrations.mock import (
     MockSpeechToText,
     MockTextToSpeech,
 )
+from app.integrations.paytm.provider import (
+    FallbackPaymentProvider,
+    PaytmStagingPaymentProvider,
+)
 from app.integrations.sarvam.provider import (
     FallbackSpeechToText,
     FallbackTextToSpeech,
@@ -48,6 +52,8 @@ __all__ = [
     "SarvamTextToSpeech",
     "FallbackSpeechToText",
     "FallbackTextToSpeech",
+    "PaytmStagingPaymentProvider",
+    "FallbackPaymentProvider",
     "MockPaymentProvider",
     "MockSettlementProvider",
     "MockSettlementOpsProvider",
@@ -88,7 +94,12 @@ def get_tts_provider(name: str | None = None) -> TextToSpeech:
 
 
 def get_payment_provider(name: str | None = None) -> PaymentProvider:
-    return MockPaymentProvider()
+    provider_name = (name or settings.PAYTM_ENVIRONMENT).lower()
+    if provider_name == "mock":
+        return MockPaymentProvider()
+    if provider_name == "paytm_direct":
+        return PaytmStagingPaymentProvider()
+    return FallbackPaymentProvider()
 
 
 def get_settlement_provider(name: str | None = None) -> SettlementProvider:
