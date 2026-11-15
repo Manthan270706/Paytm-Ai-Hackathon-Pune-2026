@@ -5,17 +5,6 @@ Do not overwrite previous handoffs.
 
 ---
 
-## U6-A3 chunk 1: Base controls  (Cursor, 2026-11-15 13:58)
-- Status: done
-- Branch: upscale/U6-A3   Last commit: 13c37121f813672847216440c1469c6111974b83
-- Files changed: apps/web/src/components/Button.tsx, Input.tsx, Card.tsx, ListRow.tsx, StatusChip.tsx, base-controls.test.tsx
-- Tests run and result: esbuild + node base-controls.test.tsx passed (5 components); eslint on those files passed; tsc --noEmit passed; scripts/guard.py passed
-- Acceptance criteria: components render from design tokens (met); keyboard use (met); tests, lint and tsc pass (met). Screens were not edited.
-- Left to do: U6-A3 chunk 2 (Stepper, BottomNav, Sidebar, DataTable)
-- Gotchas: no unit-test dependency, so the test is run by bundling with esbuild. APPROVED uses the resolved status tokens (theme has no approved border). CANCELLED uses surface-subtle, ink-secondary and surface-border (no cancelled token). Amount is a display string, not a calculated number.
-- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only
-
-
 ## U6-A1 & U6-A2: Design Audit, DESIGN.md and Design Tokens (Antigravity, 15 Nov 2026, 13:46 IST)
 - Status: done
 - Branch: upscale/u6-a1   Last commit: 58491ed
@@ -29,6 +18,18 @@ Do not overwrite previous handoffs.
 - Left to do: U6-A3 Chunk 1 (Cursor: Button, Input, Card, ListRow, StatusChip using tokens), then U6-A3 Chunk 2
 - Gotchas: Do not use Paytm logos or marks. All component colors and spacing must reference Tailwind theme tokens (paytm-*, surface-*, ink-*, status-*).
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+
+---
+
+## U6-A3 chunk 1: Base controls (Cursor, 2026-11-15 13:58)
+- Status: done
+- Branch: upscale/U6-A3   Last commit: 13c37121f813672847216440c1469c6111974b83
+- Files changed: apps/web/src/components/Button.tsx, Input.tsx, Card.tsx, ListRow.tsx, StatusChip.tsx, base-controls.test.tsx
+- Tests run and result: esbuild + node base-controls.test.tsx passed (5 components); eslint on those files passed; tsc --noEmit passed; scripts/guard.py passed
+- Acceptance criteria: components render from design tokens (met); keyboard use (met); tests, lint and tsc pass (met). Screens were not edited.
+- Left to do: U6-A3 chunk 2 (Stepper, BottomNav, Sidebar, DataTable)
+- Gotchas: no unit-test dependency, so the test is run by bundling with esbuild. APPROVED uses the resolved status tokens (theme has no approved border). CANCELLED uses surface-subtle, ink-secondary and surface-border (no cancelled token). Amount is a display string, not a calculated number.
+- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only
 
 ---
 
@@ -129,3 +130,5 @@ Do not overwrite previous handoffs.
 - Left to do: U4-A1 (Evaluation harness), U3-A1 (Proactive overdue scanner), U5 (Paytm staging payments), U6-A8 (Visual QA)
 - Gotchas: Replay cache and deterministic template failovers guarantee 100% uptime even under complete offline / air-gapped situations.
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+=======
+>>>>>>> upscale/u1-a1
