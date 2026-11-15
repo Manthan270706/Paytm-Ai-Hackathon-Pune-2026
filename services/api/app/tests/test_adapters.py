@@ -136,6 +136,7 @@ def test_factories() -> None:
     assert isinstance(get_llm_provider("mock"), LLMProvider)
     assert isinstance(get_llm_provider("groq_direct"), LLMProvider)
     assert isinstance(get_llm_provider("local_direct"), LLMProvider)
+    assert isinstance(get_llm_provider("ollama_direct"), LLMProvider)
     assert isinstance(get_stt_provider("mock"), SpeechToText)
     assert isinstance(get_tts_provider("mock"), TextToSpeech)
     assert isinstance(get_payment_provider("mock"), PaymentProvider)
@@ -145,10 +146,11 @@ def test_factories() -> None:
 
 @pytest.mark.asyncio
 async def test_groq_and_local_llm_adapters() -> None:
-    from app.integrations import GroqLLMProvider, LocalLLMProvider, FallbackLLMProvider
+    from app.integrations import GroqLLMProvider, LocalLLMProvider, OllamaLLMProvider, FallbackLLMProvider
 
     assert issubclass(GroqLLMProvider, LLMProvider)
     assert issubclass(LocalLLMProvider, LLMProvider)
+    assert issubclass(OllamaLLMProvider, LLMProvider)
     assert issubclass(FallbackLLMProvider, LLMProvider)
 
     # Groq without API key raises ValueError
@@ -161,11 +163,21 @@ async def test_groq_and_local_llm_adapters() -> None:
     is_live = await local.is_available()
     assert is_live is False
 
-    # Fallback chain gracefully falls back to mock when services offline
+    # Ollama provider offline probe and warmup
+    ollama = OllamaLLMProvider(base_url="http://127.0.0.1:59998")
+    assert await ollama.is_available() is False
+    assert await ollama.warmup() is False
+
+    # Fallback chain with dynamic LLM_CASCADE
     fallback = FallbackLLMProvider()
-    fallback.local = local
+    fallback.ollama = ollama
+    fallback.local = ollama
     fallback.groq = groq
     fallback.gemini.api_key = None
+    assert "ollama" in fallback.cascade_tiers
+
     res = await fallback.generate_structured("Hi", SampleClassification)
     assert isinstance(res, SampleClassification)
+    assert len(fallback.tier_history) > 0
+
 

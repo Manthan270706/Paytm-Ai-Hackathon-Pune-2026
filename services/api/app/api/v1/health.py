@@ -35,6 +35,8 @@ async def health_check(
             "demo_data_mode": settings.DEMO_DATA_MODE,
             "demo_deterministic": settings.DEMO_DETERMINISTIC,
             "llm_provider": settings.LLM_PROVIDER,
+            "llm_cascade": getattr(settings, "LLM_CASCADE", "groq,ollama,cache,mock"),
+            "llm_active_tier": getattr(get_llm_provider(), "last_served_from", "UNKNOWN"),
             "voice_provider": settings.VOICE_PROVIDER,
             "payment_provider": {
                 "active": getattr(payment_prov, "last_source", "SYNTHETIC_DEMO"),
