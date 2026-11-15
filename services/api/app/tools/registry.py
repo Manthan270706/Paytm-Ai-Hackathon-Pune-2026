@@ -84,7 +84,7 @@ async def run_get_merchant_context(
             )
     return GetMerchantContextOutput(
         mid="MID_DEMO_TWOBITS",
-        display_name="Two Bits Chai & Snacks",
+        display_name="Paytm Smart Merchant Store",
         status="ACTIVE",
         preferred_language="en",
         source_type="SYNTHETIC_DEMO",

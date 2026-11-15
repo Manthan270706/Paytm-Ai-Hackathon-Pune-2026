@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph import agent_graph
 from app.agents.state import AgentState
+from app.core.config import settings
 from app.core.redaction import redact
 from app.db.models import AgentRun, Conversation, Message
 
@@ -70,7 +71,7 @@ async def run_agent_turn(
         conversation_id=conv.id,
         case_id=conv.active_case_id,
         provider="gemini",
-        model="gemini-1.5-flash",
+        model=getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash-lite"),
         status="RUNNING",
         trace_id=trace_id,
         created_at=datetime.now(UTC),

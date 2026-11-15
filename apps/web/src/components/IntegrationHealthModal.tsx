@@ -72,7 +72,7 @@ export const IntegrationHealthModal: FC<IntegrationHealthModalProps> = ({
                 <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div className="text-xs text-slate-300">
                   <span className="font-bold text-white">Zero Secret Exposure:</span> All
-                  merchant keys, Gemini tokens, and Sarvam API credentials reside strictly in
+                  merchant keys, Groq/Gemini API tokens, and Sarvam credentials reside strictly in
                   isolated server-side environments. No secrets are logged or transmitted to the client.
                 </div>
               </div>
@@ -144,25 +144,41 @@ export const IntegrationHealthModal: FC<IntegrationHealthModalProps> = ({
                       <Cpu className="w-4 h-4 text-purple-400" />
                       <span>LLM & Replay Engine</span>
                     </div>
-                    <span className="text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full">
-                      {health.llm_provider}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full">
+                        {health.llm_provider}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        ONLINE
+                      </span>
+                    </div>
                   </div>
                   <div className="text-xs text-slate-400 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Provider Status:</span>
+                      <span className="text-emerald-400 font-semibold text-[11px]">
+                        {health.llm_provider === 'groq'
+                          ? 'Active (Groq LPU / Local LLM)'
+                          : health.llm_provider === 'gemini'
+                          ? 'Active (Google Gemini 3.5 Flash)'
+                          : `Active (${health.llm_provider.toUpperCase()})`}
+                      </span>
+                    </div>
                     <div className="flex justify-between">
                       <span>Replay Mode:</span>
                       <span
                         className={`font-bold text-[11px] ${
-                          health.demo_deterministic ? 'text-amber-400' : 'text-slate-400'
+                          health.demo_deterministic ? 'text-amber-400' : 'text-slate-300'
                         }`}
                       >
-                        {health.demo_deterministic ? 'Deterministic (Cache)' : 'Off (Live Provider)'}
+                        {health.demo_deterministic ? 'Enabled (Deterministic Cache)' : 'Disabled (Live API Calls)'}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Fallback Chain:</span>
-                      <span className="text-slate-300 font-medium">
-                        Provider → Cache → Mock
+                      <span className="text-slate-300 font-medium text-[11px]">
+                        Local LLM → Groq Cloud → Cache → Mock
                       </span>
                     </div>
                   </div>

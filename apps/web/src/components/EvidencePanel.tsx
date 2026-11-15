@@ -58,16 +58,22 @@ export const EvidencePanel: FC<EvidencePanelProps> = ({
       {/* Financial Breakdown Grid */}
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="p-2.5 bg-slate-900/80 border border-slate-800/80 rounded-lg">
-          <span className="text-[10px] text-slate-400 block font-mono">Expected Net</span>
-          <span className="text-sm font-bold text-white font-mono">₹{evidence.expected_net}</span>
+          <span className="text-[10px] text-slate-400 block font-mono">{evidence.metric_1_label || 'Expected Net'}</span>
+          <span className="text-sm font-bold text-white font-mono">
+            {evidence.metric_1_value || (evidence.expected_net ? `₹${evidence.expected_net}` : '—')}
+          </span>
         </div>
         <div className="p-2.5 bg-slate-900/80 border border-slate-800/80 rounded-lg">
-          <span className="text-[10px] text-slate-400 block font-mono">Observed Net</span>
-          <span className="text-sm font-bold text-slate-300 font-mono">₹{evidence.observed_net}</span>
+          <span className="text-[10px] text-slate-400 block font-mono">{evidence.metric_2_label || 'Observed Net'}</span>
+          <span className="text-sm font-bold text-slate-300 font-mono">
+            {evidence.metric_2_value || (evidence.observed_net ? `₹${evidence.observed_net}` : '—')}
+          </span>
         </div>
         <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <span className="text-[10px] text-amber-400 block font-mono">Discrepancy</span>
-          <span className="text-sm font-bold text-amber-300 font-mono">₹{evidence.discrepancy}</span>
+          <span className="text-[10px] text-amber-400 block font-mono">{evidence.metric_3_label || 'Discrepancy'}</span>
+          <span className="text-sm font-bold text-amber-300 font-mono">
+            {evidence.metric_3_value || (evidence.discrepancy ? `₹${evidence.discrepancy}` : '—')}
+          </span>
         </div>
       </div>
 
@@ -147,7 +153,10 @@ export const EvidencePanel: FC<EvidencePanelProps> = ({
         {activeCaseId ? (
           <span className="text-slate-400 flex items-center gap-1">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            Bound to Case: <strong className="text-white">#{activeCaseId.slice(0, 8)}</strong>
+            Bound to Case:{' '}
+            <strong className="text-white">
+              #{evidence.case_number || (activeCaseId.startsWith('CASE-') ? activeCaseId : activeCaseId.slice(0, 8))}
+            </strong>
           </span>
         ) : (
           <span className="text-slate-500 italic">No case created yet</span>

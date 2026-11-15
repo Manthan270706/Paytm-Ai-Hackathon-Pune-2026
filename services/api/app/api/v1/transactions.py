@@ -9,7 +9,7 @@ from app.api.v1.schemas import TransactionDetailResponse, TransactionItemRespons
 from app.core.dependencies import AuthContext, get_auth_context, get_scoped_repo
 from app.core.exceptions import NotFoundError
 from app.core.response import success_response
-from app.db.models import SettlementEntry, Transaction
+from app.db.models import SettlementBatch, SettlementEntry, Transaction
 from app.db.scoped_repository import ScopedRepository
 from app.db.session import get_db_session
 
@@ -75,9 +75,15 @@ async def get_transaction(
     if not txn:
         raise NotFoundError(f"Transaction {transaction_id} not found")
 
-    # Check if settled
+    # Check if settled and lookup actual batch_ref
     entry_stmt = select(SettlementEntry).where(SettlementEntry.transaction_id == txn.id)
     entry = (await session.execute(entry_stmt)).scalar_one_or_none()
+    batch_ref = None
+    if entry and entry.batch_id:
+        batch_stmt = select(SettlementBatch).where(SettlementBatch.id == entry.batch_id)
+        batch = (await session.execute(batch_stmt)).scalar_one_or_none()
+        if batch:
+            batch_ref = batch.batch_ref
 
     return success_response(
         data=TransactionDetailResponse(
@@ -92,7 +98,7 @@ async def get_transaction(
             txn_time=txn.txn_time,
             source_type=txn.source_type,
             settlement_status="SETTLED" if entry else "UNSETTLED",
-            settlement_batch_ref="BATCH_20261112_01",
+            settlement_batch_ref=batch_ref,
         ).model_dump(),
         source_type=txn.source_type,
     )

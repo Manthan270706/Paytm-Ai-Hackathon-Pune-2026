@@ -52,7 +52,7 @@ async def test_mock_llm_provider() -> None:
         schema=SampleClassification,
     )
     assert isinstance(result, SampleClassification)
-    assert result.intent == "SETTLEMENT_MISMATCH"
+    assert result.intent == "PAYOUT_DELAY"
     assert result.is_settlement_issue is True
 
     # Canned response support
@@ -134,8 +134,38 @@ async def test_mock_settlement_ops_provider() -> None:
 
 def test_factories() -> None:
     assert isinstance(get_llm_provider("mock"), LLMProvider)
+    assert isinstance(get_llm_provider("groq_direct"), LLMProvider)
+    assert isinstance(get_llm_provider("local_direct"), LLMProvider)
     assert isinstance(get_stt_provider("mock"), SpeechToText)
     assert isinstance(get_tts_provider("mock"), TextToSpeech)
     assert isinstance(get_payment_provider("mock"), PaymentProvider)
     assert isinstance(get_settlement_provider("mock"), SettlementProvider)
     assert isinstance(get_settlement_ops_provider("mock"), SettlementOpsProvider)
+
+
+@pytest.mark.asyncio
+async def test_groq_and_local_llm_adapters() -> None:
+    from app.integrations import GroqLLMProvider, LocalLLMProvider, FallbackLLMProvider
+
+    assert issubclass(GroqLLMProvider, LLMProvider)
+    assert issubclass(LocalLLMProvider, LLMProvider)
+    assert issubclass(FallbackLLMProvider, LLMProvider)
+
+    # Groq without API key raises ValueError
+    groq = GroqLLMProvider(api_key="")
+    with pytest.raises(ValueError, match="GROQ_API_KEY is not configured"):
+        await groq.generate_structured("test", SampleClassification)
+
+    # Local LLM liveness probe returns False when offline without throwing unhandled exception
+    local = LocalLLMProvider(base_url="http://127.0.0.1:59999/v1")
+    is_live = await local.is_available()
+    assert is_live is False
+
+    # Fallback chain gracefully falls back to mock when services offline
+    fallback = FallbackLLMProvider()
+    fallback.local = local
+    fallback.groq = groq
+    fallback.gemini.api_key = None
+    res = await fallback.generate_structured("Hi", SampleClassification)
+    assert isinstance(res, SampleClassification)
+

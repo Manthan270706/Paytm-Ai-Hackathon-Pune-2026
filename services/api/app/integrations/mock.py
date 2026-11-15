@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -40,7 +41,64 @@ class MockLLMProvider(LLMProvider):
             data = self.canned_responses[schema_name]
             return schema.model_validate(data)
 
+        # Handle ConversationalResponse directly
+        prompt_lower = prompt.lower()
+        if schema_name == "ConversationalResponse":
+            if "mr" in prompt_lower or any(w in prompt for w in ["नमस्कार", "कशी", "आहे"]):
+                reply = (
+                    "नमस्कार! मी ऑप्ससाथी (OpsSaathi) आहे, तुमचा स्वायत्त पेटीएम मर्चंट ऑपरेशन्स साथी. "
+                    "मी सेटलमेंट तफावत, दुहेरी रिफंड डेबिट, MDR फी, साउंडबॉक्स किंवा पेआउट तपासणीत मदत करू शकतो. "
+                    "मी आज तुम्हाला कशी मदत करू?"
+                )
+            elif "hi" in prompt_lower or any(w in prompt for w in ["नमस्ते", "कैसे", "मदद"]):
+                reply = (
+                    "नमस्ते! मैं ऑप्ससाथी (OpsSaathi) हूँ, आपका स्वायत्त पेटीएम मर्चेंट ऑपरेशन्स साथी। "
+                    "मैं सेटलमेंट, रिफंड विवाद, MDR शुल्क अंतर, साउंडबॉक्स जांच या पेआउट में देरी जैसी समस्याओं को सुलझाने में सहायता करता हूँ। "
+                    "आज मैं आपकी क्या मदद करूँ?"
+                )
+            else:
+                reply = (
+                    "Hello! I am OpsSaathi, your autonomous Paytm Merchant Operations Teammate. "
+                    "I can help investigate missing settlements, duplicate refund debits, MDR fee variances, "
+                    "Soundbox telemetry diagnostics, or delayed payouts. How can I assist your business today?"
+                )
+            return schema.model_validate({
+                "reply": reply,
+                "suggested_actions": ["Missing Settlement", "Refund Dispute", "MDR Overcharge", "Soundbox Check", "Payout Delay"],
+            })
+
         # Build fallback mock dictionary by inspecting schema field types
+        detected_intent = "SETTLEMENT_MISMATCH"
+        has_operational_keyword = any(
+            k in prompt_lower
+            for k in [
+                "settlement", "missing", "refund", "debited", "mdr", "fee", "rupay",
+                "soundbox", "hardware", "audio", "latency", "chime", "payout", "delay",
+                "hold", "sla", "6000", "1200", "850", "18500", "ord_", "batch_", "txn_",
+            ]
+        )
+
+        if not has_operational_keyword and (
+            re.search(r"\b(hi|hello|hey|heyy+|howdy|greetings|namaste|namaskar|good\s*(morning|afternoon|evening)|who\s+are\s+you|who\s+is\s+this)\b", prompt_lower)
+            or any(w in prompt for w in ["नमस्ते", "नमस्कार", "प्रणाम", "हाय", "हॅलो", "कोण", "कौन"])
+        ):
+            detected_intent = "GREETING"
+        elif not has_operational_keyword and (
+            "help" in prompt_lower or "what can you do" in prompt_lower or "features" in prompt_lower
+            or any(w in prompt for w in ["मदद", "काय करू शकता", "क्या कर सकते"])
+        ):
+            detected_intent = "GENERAL_QUERY"
+        elif "refund" in prompt_lower or "debited" in prompt_lower or "1025" in prompt_lower:
+            detected_intent = "REFUND_DISPUTE"
+        elif "mdr" in prompt_lower or "fee" in prompt_lower or "rupay" in prompt_lower or "1026" in prompt_lower:
+            detected_intent = "FEE_OVERCHARGE"
+        elif "soundbox" in prompt_lower or "hardware" in prompt_lower or "audio" in prompt_lower or "1027" in prompt_lower:
+            detected_intent = "HARDWARE_DIAGNOSTICS"
+        elif "payout" in prompt_lower or "delay" in prompt_lower or "hold" in prompt_lower or "1028" in prompt_lower:
+            detected_intent = "PAYOUT_DELAY"
+        elif "settlement" in prompt_lower or "missing" in prompt_lower or "6000" in prompt_lower or "1024" in prompt_lower:
+            detected_intent = "SETTLEMENT_MISMATCH"
+
         mock_data: dict[str, Any] = {}
         for name, field in schema.model_fields.items():
             ann = field.annotation
@@ -49,7 +107,25 @@ class MockLLMProvider(LLMProvider):
                 if "id" in name.lower():
                     mock_data[name] = str(uuid.uuid4())
                 elif "intent" in name.lower():
-                    mock_data[name] = "SETTLEMENT_MISMATCH"
+                    mock_data[name] = detected_intent
+                elif name == "category":
+                    mock_data[name] = detected_intent
+                elif name == "amount":
+                    if "1200" in prompt_lower or "1,200" in prompt_lower:
+                        mock_data[name] = "1200.00"
+                    elif "850" in prompt_lower:
+                        mock_data[name] = "850.00"
+                    elif "18500" in prompt_lower or "18,500" in prompt_lower:
+                        mock_data[name] = "18500.00"
+                    else:
+                        mock_data[name] = "6000.00"
+                elif name == "reference":
+                    if "ord_20261111_09" in prompt_lower:
+                        mock_data[name] = "ORD_20261111_09"
+                    elif "batch_20261110_02" in prompt_lower:
+                        mock_data[name] = "BATCH_20261110_02"
+                    else:
+                        mock_data[name] = "ORD_20261112_01"
                 else:
                     mock_data[name] = "Mock generated text"
             elif ann is int:
@@ -59,7 +135,16 @@ class MockLLMProvider(LLMProvider):
             elif ann is bool:
                 mock_data[name] = True
             elif ann is Decimal:
-                mock_data[name] = Decimal("6000.00")
+                if detected_intent == "REFUND_DISPUTE":
+                    mock_data[name] = Decimal("1200.00")
+                elif detected_intent == "FEE_OVERCHARGE":
+                    mock_data[name] = Decimal("850.00")
+                elif detected_intent == "PAYOUT_DELAY":
+                    mock_data[name] = Decimal("18500.00")
+                elif detected_intent == "HARDWARE_DIAGNOSTICS":
+                    mock_data[name] = Decimal("0.00")
+                else:
+                    mock_data[name] = Decimal("6000.00")
             elif ann is uuid.UUID:
                 mock_data[name] = uuid.uuid4()
             elif ann is datetime:

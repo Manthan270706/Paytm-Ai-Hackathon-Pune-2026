@@ -14,6 +14,10 @@ from app.integrations.gemini.provider import (
     FallbackLLMProvider,
     GeminiLLMProvider,
 )
+from app.integrations.groq.provider import (
+    GroqLLMProvider,
+    LocalLLMProvider,
+)
 from app.integrations.mock import (
     MockLLMProvider,
     MockPaymentProvider,
@@ -44,6 +48,8 @@ __all__ = [
     "SettlementEntryResult",
     "ResyncResult",
     "GeminiLLMProvider",
+    "GroqLLMProvider",
+    "LocalLLMProvider",
     "FallbackLLMProvider",
     "MockLLMProvider",
     "MockSpeechToText",
@@ -70,6 +76,10 @@ def get_llm_provider(name: str | None = None) -> LLMProvider:
     provider_name = (name or settings.LLM_PROVIDER).lower()
     if provider_name == "mock":
         return MockLLMProvider()
+    if provider_name in {"groq_direct"}:
+        return GroqLLMProvider()
+    if provider_name in {"local_direct", "ollama_direct"}:
+        return LocalLLMProvider()
     if provider_name == "gemini_direct":
         return GeminiLLMProvider()
     return FallbackLLMProvider()

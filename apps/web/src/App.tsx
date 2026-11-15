@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   UserRole,
   MerchantProfile,
@@ -19,8 +19,13 @@ import { ChatWorkspace } from './components/ChatWorkspace'
 import { OperationsConsole } from './components/OperationsConsole'
 import { TracePanel } from './components/TracePanel'
 import { IntegrationHealthModal } from './components/IntegrationHealthModal'
+import { API_BASE } from './config'
 
-const API_BASE = 'http://localhost:8000/api/v1'
+export interface ActionFeedback {
+  type: 'error' | 'warning' | 'info' | 'success'
+  title: string
+  message: string
+}
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState<UserRole>('MERCHANT')
@@ -29,12 +34,32 @@ export default function App() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
   const [settlements, setSettlements] = useState<SettlementBatchItem[]>([])
   const [cases, setCases] = useState<SupportCaseItem[]>([])
-  const [discrepancy, setDiscrepancy] = useState<string>('6000.00')
+  const [discrepancy, setDiscrepancy] = useState<string>('0.00')
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [evidenceSummary, setEvidenceSummary] = useState<DiscrepancySummary | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('opssaathi_chat_messages')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [evidenceSummary, setEvidenceSummary] = useState<DiscrepancySummary | null>(() => {
+    try {
+      const saved = localStorage.getItem('opssaathi_evidence_summary')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null)
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('opssaathi_conversation_id')
+    } catch {
+      return null
+    }
+  })
   const [activeCaseDetail, setActiveCaseDetail] = useState<CaseDetail | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false)
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([])
@@ -44,6 +69,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const isSendingRef = useRef(false)
   const [isResetting, setIsResetting] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false)
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null)
@@ -53,6 +79,52 @@ export default function App() {
   const [health, setHealth] = useState<IntegrationHealth | null>(null)
   const [isLoadingHealth, setIsLoadingHealth] = useState<boolean>(false)
   const [isHealthModalOpen, setIsHealthModalOpen] = useState<boolean>(false)
+  const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
+
+  // Synchronize chat state to localStorage to survive page refreshes
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem('opssaathi_chat_messages', JSON.stringify(messages))
+      } else {
+        localStorage.removeItem('opssaathi_chat_messages')
+      }
+    } catch {
+      // ignore
+    }
+  }, [messages])
+
+  useEffect(() => {
+    try {
+      if (conversationId) {
+        localStorage.setItem('opssaathi_conversation_id', conversationId)
+      } else {
+        localStorage.removeItem('opssaathi_conversation_id')
+      }
+    } catch {
+      // ignore
+    }
+  }, [conversationId])
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem('opssaathi_active_case_id')
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      if (evidenceSummary) {
+        localStorage.setItem('opssaathi_evidence_summary', JSON.stringify(evidenceSummary))
+      } else {
+        localStorage.removeItem('opssaathi_evidence_summary')
+      }
+    } catch {
+      // ignore
+    }
+  }, [evidenceSummary])
 
   const token =
     currentRole === 'MERCHANT'
@@ -122,8 +194,8 @@ export default function App() {
       if (stlRes.ok) {
         const sData = await stlRes.json()
         setSettlements(sData.data?.batches || [])
-        if (sData.data?.discrepancy_amount) {
-          setDiscrepancy(sData.data.discrepancy_amount)
+        if (sData.data?.discrepancy_amount !== undefined && sData.data?.discrepancy_amount !== null) {
+          setDiscrepancy(String(sData.data.discrepancy_amount))
         }
       }
 
@@ -133,17 +205,32 @@ export default function App() {
         const cData = await caseRes.json()
         const fetchedCases = cData.data?.items || []
         setCases(fetchedCases)
-        if (fetchedCases.length > 0) {
-          const targetId = activeCaseId && fetchedCases.some((c: any) => c.id === activeCaseId)
-            ? activeCaseId
-            : fetchedCases[0].id
-          loadCaseDetail(targetId)
+        if (activeCaseId && fetchedCases.some((c: any) => c.id === activeCaseId)) {
+          loadCaseDetail(activeCaseId)
+        } else {
+          setActiveCaseDetail(null)
         }
       }
 
       // 5. Outcome Metrics & Integration Health
       loadMetrics()
       loadHealth()
+
+      // 6. Active Conversation Messages (fallback if local storage was empty)
+      try {
+        const msgRes = await fetch(`${API_BASE}/agent/conversations/active/messages`, { headers })
+        if (msgRes.ok) {
+          const mData = await msgRes.json()
+          if (mData.data?.messages && mData.data.messages.length > 0) {
+            setMessages((current) => (current.length === 0 ? mData.data.messages : current))
+            if (mData.data.conversation_id) {
+              setConversationId((curr) => curr || mData.data.conversation_id)
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
 
       setError(null)
     } catch (err: any) {
@@ -175,8 +262,11 @@ export default function App() {
   }, [currentRole])
 
   // Handle sending a message to the agent
-  // Handle sending a message to the agent
   const handleSendMessage = async (text: string) => {
+    if (!text || !text.trim() || isSendingRef.current) return
+    isSendingRef.current = true
+    setIsSending(true)
+
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'USER',
@@ -186,7 +276,6 @@ export default function App() {
       channel: 'CHAT',
     }
     setMessages((prev) => [...prev, userMsg])
-    setIsSending(true)
 
     try {
       const res = await fetch(`${API_BASE}/agent/messages`, {
@@ -202,7 +291,10 @@ export default function App() {
         }),
       })
 
-      if (!res.ok) throw new Error('Agent execution failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error?.message || `Agent execution failed (${res.status})`)
+      }
       const data = await res.json()
       const agentData = data.data
 
@@ -216,7 +308,13 @@ export default function App() {
         is_replay: agentData.is_replay,
         llm_source: agentData.llm_source,
       }
-      setMessages((prev) => [...prev, botMsg])
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last && last.role === 'ASSISTANT' && last.content === botMsg.content) {
+          return prev
+        }
+        return [...prev, botMsg]
+      })
 
       if (agentData.is_replay) {
         setIsReplayMode(true)
@@ -224,9 +322,7 @@ export default function App() {
       if (agentData.conversation_id) {
         setConversationId(agentData.conversation_id)
       }
-      if (agentData.evidence_summary) {
-        setEvidenceSummary(agentData.evidence_summary)
-      }
+      setEvidenceSummary(agentData.evidence_summary || null)
       if (agentData.active_case_id) {
         setActiveCaseId(agentData.active_case_id)
       }
@@ -249,12 +345,17 @@ export default function App() {
       }
       setMessages((prev) => [...prev, errorMsg])
     } finally {
+      isSendingRef.current = false
       setIsSending(false)
     }
   }
 
   // Handle submitting voice transcript with channel continuity
   const handleSendVoice = async (transcript: string) => {
+    if (!transcript || !transcript.trim() || isSendingRef.current) return
+    isSendingRef.current = true
+    setIsSending(true)
+
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'USER',
@@ -264,7 +365,6 @@ export default function App() {
       channel: 'VOICE',
     }
     setMessages((prev) => [...prev, userMsg])
-    setIsSending(true)
 
     try {
       const res = await fetch(`${API_BASE}/voice/transcriptions`, {
@@ -281,7 +381,10 @@ export default function App() {
         }),
       })
 
-      if (!res.ok) throw new Error('Voice transcription processing failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error?.message || `Voice transcription processing failed (${res.status})`)
+      }
       const data = await res.json()
       const voiceData = data.data
 
@@ -295,7 +398,13 @@ export default function App() {
         is_replay: voiceData.is_replay,
         llm_source: voiceData.llm_source,
       }
-      setMessages((prev) => [...prev, botMsg])
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last && last.role === 'ASSISTANT' && last.content === botMsg.content) {
+          return prev
+        }
+        return [...prev, botMsg]
+      })
 
       if (voiceData.is_replay) {
         setIsReplayMode(true)
@@ -303,9 +412,7 @@ export default function App() {
       if (voiceData.conversation_id) {
         setConversationId(voiceData.conversation_id)
       }
-      if (voiceData.evidence_summary) {
-        setEvidenceSummary(voiceData.evidence_summary)
-      }
+      setEvidenceSummary(voiceData.evidence_summary || null)
       if (voiceData.active_case_id) {
         setActiveCaseId(voiceData.active_case_id)
       }
@@ -352,30 +459,47 @@ export default function App() {
       }
       setMessages((prev) => [...prev, errorMsg])
     } finally {
+      isSendingRef.current = false
       setIsSending(false)
     }
   }
 
   // Stream live SSE trace events
-  const startSseTrace = (runId: string) => {
+  const startSseTrace = async (runId: string) => {
     try {
-      const eventSource = new EventSource(`${API_BASE}/agent/runs/${runId}/events`)
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data)
-          setTraceEvents((prev) => [...prev, parsed])
-          if (parsed.type === 'COMPLETED') {
-            eventSource.close()
+      const res = await fetch(`${API_BASE}/agent/runs/${runId}/events`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok || !res.body) return
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let isDone = false
+      while (!isDone) {
+        const result = await reader.read()
+        isDone = result.done
+        if (isDone || !result.value) break
+        buffer += decoder.decode(result.value, { stream: true })
+        const chunks = buffer.split('\n\n')
+        buffer = chunks.pop() || ''
+        for (const chunk of chunks) {
+          const lines = chunk.split('\n')
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const parsed = JSON.parse(line.slice(6))
+                setTraceEvents((prev) => [...prev, parsed])
+              } catch {
+                // ignore parsing error
+              }
+            }
           }
-        } catch {
-          // ignore parsing error
         }
       }
-      eventSource.onerror = () => {
-        eventSource.close()
-      }
     } catch {
-      // EventSource fallback
+      // Stream fallback
     }
   }
 
@@ -390,6 +514,14 @@ export default function App() {
         },
       })
       if (res.ok) {
+        try {
+          localStorage.removeItem('opssaathi_chat_messages')
+          localStorage.removeItem('opssaathi_conversation_id')
+          localStorage.removeItem('opssaathi_active_case_id')
+          localStorage.removeItem('opssaathi_evidence_summary')
+        } catch {
+          // ignore
+        }
         setMessages([])
         setTraceEvents([])
         setEvidenceSummary(null)
@@ -398,10 +530,27 @@ export default function App() {
         setActiveCaseDetail(null)
         setVerificationResult(null)
         setIsReplayMode(false)
+        setActionFeedback({
+          type: 'info',
+          title: 'Demo Environment Reset',
+          message: 'Frozen baseline restored: ₹6,000.00 discrepancy, support cases reset.',
+        })
         await loadDashboardData()
+      } else {
+        const errData = await res.json().catch(() => null)
+        setActionFeedback({
+          type: 'error',
+          title: 'Reset Failed',
+          message: errData?.error?.message || `Demo reset failed (${res.status})`,
+        })
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      setActionFeedback({
+        type: 'error',
+        title: 'Connection Error',
+        message: err.message || 'Failed to connect to reset endpoint',
+      })
     } finally {
       setIsResetting(false)
     }
@@ -411,22 +560,39 @@ export default function App() {
   const handleSimulateSettlement = async () => {
     try {
       setIsSimulating(true)
+      const targetBatch = settlements.length > 0 ? settlements[0].batch_ref : 'BATCH_20261112_01'
+      const targetAmount = parseFloat(discrepancy || '0') > 0 ? discrepancy : '6000.00'
       const res = await fetch(`${API_BASE}/demo/simulate-settlement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Bearer demo-token-support_agent-1',
         },
-        body: JSON.stringify({ amount: '6000.00', batch_ref: 'BATCH_20261112_01' }),
+        body: JSON.stringify({ amount: targetAmount, batch_ref: targetBatch }),
       })
       if (res.ok) {
+        setActionFeedback({
+          type: 'success',
+          title: 'Bank Credit Simulated',
+          message: `₹${parseFloat(targetAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })} credit recorded on ledger. Click "Run Independent Verification" to verify and close this case.`,
+        })
         await loadDashboardData()
         if (activeCaseDetail?.id) {
           await loadCaseDetail(activeCaseDetail.id)
         }
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Simulation failed (${res.status})`
+        setActionFeedback({
+          type: 'error',
+          title: 'Simulation Failed',
+          message: errMsg,
+        })
+        throw new Error(errMsg)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      throw err
     } finally {
       setIsSimulating(false)
     }
@@ -453,11 +619,26 @@ export default function App() {
         }),
       })
       if (res.ok) {
+        setActionFeedback({
+          type: 'success',
+          title: 'Settlement Re-Sync Approved',
+          message: 'Case is now in VERIFYING status. Step 2: Click "Simulate Bank Settlement" to deposit credit, then run verification.',
+        })
         await loadDashboardData()
         await loadCaseDetail(caseId)
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Approval failed with status ${res.status}`
+        setActionFeedback({
+          type: 'error',
+          title: 'Approval Failed',
+          message: errMsg,
+        })
+        throw new Error(errMsg)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      throw err
     }
   }
 
@@ -484,11 +665,26 @@ export default function App() {
         }),
       })
       if (res.ok) {
+        setActionFeedback({
+          type: 'info',
+          title: 'Action Rejected',
+          message: 'Settlement re-sync rejected with documented reason.',
+        })
         await loadDashboardData()
         await loadCaseDetail(caseId)
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Rejection failed (${res.status})`
+        setActionFeedback({
+          type: 'error',
+          title: 'Rejection Failed',
+          message: errMsg,
+        })
+        throw new Error(errMsg)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      throw err
     }
   }
 
@@ -507,11 +703,26 @@ export default function App() {
         }),
       })
       if (res.ok) {
+        setActionFeedback({
+          type: 'info',
+          title: 'Queue Updated',
+          message: `Case successfully assigned to ${queue}.`,
+        })
         await loadDashboardData()
         await loadCaseDetail(caseId)
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Assignment failed (${res.status})`
+        setActionFeedback({
+          type: 'error',
+          title: 'Assignment Failed',
+          message: errMsg,
+        })
+        throw new Error(errMsg)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      throw err
     }
   }
 
@@ -527,11 +738,92 @@ export default function App() {
       if (res.ok) {
         const data = await res.json()
         setVerificationResult(data.data)
+        if (data.data.verification_result === 'PASS') {
+          setActionFeedback({
+            type: 'success',
+            title: 'Verification Passed',
+            message: 'Ledger verified: ₹0.00 discrepancy. Case has been RESOLVED.',
+          })
+        } else {
+          const discRemains =
+            data.data?.expected_net && data.data?.after_observed
+              ? (parseFloat(data.data.expected_net) - parseFloat(data.data.after_observed)).toFixed(2)
+              : '6,000.00'
+          setActionFeedback({
+            type: 'warning',
+            title: 'Verification Discrepancy Remains',
+            message: `Discrepancy of ₹${discRemains} detected. Bank settlement credit has not been processed yet. Click "Simulate Bank Settlement" to deposit credit, then re-verify.`,
+          })
+        }
         await loadDashboardData()
         await loadCaseDetail(caseId)
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Verification failed (${res.status})`
+        setActionFeedback({
+          type: 'error',
+          title: 'Verification Pre-condition Not Met',
+          message: errMsg.includes('VERIFYING')
+            ? 'This case must be approved by supervisor before it can be verified. Please review and authorize the re-sync in Step 1 first.'
+            : errMsg,
+        })
+        throw new Error(errMsg)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      throw err
+    }
+  }
+
+  // Create support case
+  const handleCreateCase = async (data: {
+    category: string
+    priority: string
+    queue: string
+    summary: string
+  }) => {
+    try {
+      const idempotencyKey = `create-case-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      const res = await fetch(`${API_BASE}/cases`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify({
+          category: data.category,
+          priority: data.priority,
+          queue: data.queue,
+          summary: data.summary,
+        }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        const createdCase = result?.data
+        setActionFeedback({
+          type: 'success',
+          title: 'Case Created',
+          message: `Case ${createdCase?.case_number || 'new'} successfully created in ${data.queue} queue.`,
+        })
+        await loadDashboardData()
+        if (createdCase?.id) {
+          setActiveCaseId(createdCase.id)
+          await loadCaseDetail(createdCase.id)
+        }
+      } else {
+        const errData = await res.json().catch(() => null)
+        const errMsg = errData?.error?.message || `Failed to create case (${res.status})`
+        setActionFeedback({
+          type: 'error',
+          title: 'Case Creation Failed',
+          message: errMsg,
+        })
+        throw new Error(errMsg)
+      }
+    } catch (err: any) {
+      console.error(err)
+      throw err
     }
   }
 
@@ -596,13 +888,21 @@ export default function App() {
             verificationResult={verificationResult}
             activeCaseDetail={activeCaseDetail}
             onSelectCase={(id) => {
-              setActiveCaseId(id)
-              loadCaseDetail(id)
+              if (!id) {
+                setActiveCaseId(null)
+                setActiveCaseDetail(null)
+              } else {
+                setActiveCaseId(id)
+                loadCaseDetail(id)
+              }
             }}
             isLoadingDetail={isLoadingDetail}
             metrics={metrics}
             onRefreshMetrics={loadMetrics}
             isLoadingMetrics={isLoadingMetrics}
+            actionFeedback={actionFeedback}
+            onClearFeedback={() => setActionFeedback(null)}
+            onCreateCase={handleCreateCase}
           />
         )}
       </main>

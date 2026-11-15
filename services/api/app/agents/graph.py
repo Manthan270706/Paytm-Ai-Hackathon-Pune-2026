@@ -24,7 +24,7 @@ from app.agents.state import AgentState
 
 def route_after_policy(state: AgentState) -> str:
     policy = state.get("policy_evaluation", {})
-    if policy.get("decision") == "DENY":
+    if policy.get("decision") in {"DENY", "NO_ACTION"}:
         return "communicate"
     return "execute_tool"
 

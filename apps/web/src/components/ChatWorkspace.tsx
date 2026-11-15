@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, FC, KeyboardEvent } from 'react'
 import { ChatMessage, DiscrepancySummary } from '../types/api'
 import { EvidencePanel } from './EvidencePanel'
+import { API_BASE } from '../config'
 import {
   Send,
   Mic,
@@ -11,6 +12,7 @@ import {
   User,
   Volume2,
   VolumeX,
+  Loader2,
   Radio,
   AlertCircle,
   Check,
@@ -55,11 +57,26 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
   const [permissionDenied, setPermissionDenied] = useState<string | null>(null)
   const [aiDisclosed, setAiDisclosed] = useState(false)
   const [activeSpeakingMsgId, setActiveSpeakingMsgId] = useState<string | null>(null)
+  const [isSynthesizingMsgId, setIsSynthesizingMsgId] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<any>(null)
   const timerRef = useRef<any>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -137,7 +154,7 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
     // 2. Disclose AI identity and create voice session per PRD §5.2 / §9
     try {
       const token = 'demo-token-merchant-1'
-      const sessRes = await fetch('http://localhost:8000/api/v1/voice/sessions', {
+      const sessRes = await fetch(`${API_BASE}/voice/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,32 +273,147 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
     }
   }
 
-  // Browser Speech Synthesis
-  const handleSpeak = (msgId: string, text: string, lang: string) => {
-    if (!window.speechSynthesis) return
-
+  // Speech Synthesis Audio Playback (Sarvam AI Neural TTS + Browser Fallback)
+  const handleSpeak = async (msgId: string, text: string, lang?: string) => {
+    // If currently speaking this message, stop it
     if (activeSpeakingMsgId === msgId) {
-      window.speechSynthesis.cancel()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+        audioRef.current = null
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
       setActiveSpeakingMsgId(null)
+      setIsSynthesizingMsgId(null)
       return
     }
 
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-
-    if (lang === 'hi') {
-      utterance.lang = 'hi-IN'
-    } else if (lang === 'mr') {
-      utterance.lang = 'mr-IN'
-    } else {
-      utterance.lang = 'en-IN'
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
     }
 
-    utterance.onend = () => setActiveSpeakingMsgId(null)
-    utterance.onerror = () => setActiveSpeakingMsgId(null)
+    // Determine accurate language:
+    // If text has Devanagari characters, detect if Marathi or Hindi
+    let effectiveLang = (lang || currentLanguage || 'en').toLowerCase()
+    if (/[\u0900-\u097F]/.test(text)) {
+      if (
+        effectiveLang === 'mr' ||
+        text.includes('आहे') ||
+        text.includes('नाही') ||
+        text.includes('तफावत') ||
+        text.includes('बॅच') ||
+        text.includes('झाले') ||
+        text.includes('केले') ||
+        text.includes('पेमेंट्स')
+      ) {
+        effectiveLang = 'mr'
+      } else if (effectiveLang === 'en') {
+        effectiveLang = 'hi'
+      }
+    }
 
-    setActiveSpeakingMsgId(msgId)
-    window.speechSynthesis.speak(utterance)
+    // 1. Try Backend Neural TTS (Sarvam AI) for pure vernacular voice
+    setIsSynthesizingMsgId(msgId)
+    try {
+      const token = 'demo-token-merchant-1'
+      const res = await fetch(`${API_BASE}/voice/synthesize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text,
+          language: effectiveLang,
+        }),
+      })
+
+      if (res.ok) {
+        const payload = await res.json()
+        const b64 = payload?.data?.audio_base64
+        if (b64) {
+          setIsSynthesizingMsgId(null)
+          setActiveSpeakingMsgId(msgId)
+          const audio = new Audio(`data:audio/wav;base64,${b64}`)
+          audioRef.current = audio
+          audio.onended = () => {
+            setActiveSpeakingMsgId(null)
+            audioRef.current = null
+          }
+          audio.onerror = () => {
+            setActiveSpeakingMsgId(null)
+            audioRef.current = null
+          }
+          await audio.play()
+          return
+        }
+      }
+    } catch (err) {
+      console.warn('Backend Sarvam TTS fetch error, falling back to browser speech synthesis:', err)
+    } finally {
+      setIsSynthesizingMsgId(null)
+    }
+
+    // 2. Fallback to Browser Speech Synthesis
+    if (window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(text)
+      const voices = window.speechSynthesis.getVoices()
+
+      const marathiVoice = voices.find(
+        (v) =>
+          v.lang === 'mr-IN' ||
+          v.lang.toLowerCase().startsWith('mr') ||
+          v.name.toLowerCase().includes('marathi')
+      )
+      const hindiVoice = voices.find(
+        (v) =>
+          v.lang === 'hi-IN' ||
+          v.lang.toLowerCase().startsWith('hi') ||
+          v.name.toLowerCase().includes('hindi')
+      )
+
+      if (effectiveLang === 'mr') {
+        if (marathiVoice) {
+          utterance.voice = marathiVoice
+          utterance.lang = marathiVoice.lang
+        } else if (hindiVoice) {
+          // Fallback to Hindi voice for Devanagari phonetics so words are not skipped
+          utterance.voice = hindiVoice
+          utterance.lang = hindiVoice.lang
+        } else {
+          utterance.lang = 'hi-IN'
+        }
+      } else if (effectiveLang === 'hi') {
+        if (hindiVoice) {
+          utterance.voice = hindiVoice
+          utterance.lang = hindiVoice.lang
+        } else {
+          utterance.lang = 'hi-IN'
+        }
+      } else {
+        const englishIndianVoice = voices.find(
+          (v) => v.lang === 'en-IN' || v.name.toLowerCase().includes('india')
+        )
+        if (englishIndianVoice) {
+          utterance.voice = englishIndianVoice
+        }
+        utterance.lang = 'en-IN'
+      }
+
+      utterance.onend = () => setActiveSpeakingMsgId(null)
+      utterance.onerror = () => setActiveSpeakingMsgId(null)
+      setActiveSpeakingMsgId(msgId)
+      window.speechSynthesis.speak(utterance)
+    } else {
+      setActiveSpeakingMsgId(null)
+    }
   }
 
   return (
@@ -361,10 +493,13 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
             </div>
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, idx) => {
             const isUser = msg.role === 'USER'
             const isVoice = msg.channel === 'VOICE'
             const isSpeaking = activeSpeakingMsgId === msg.id
+            const isSynthesizing = isSynthesizingMsgId === msg.id
+            const isLatestAssistant =
+              !isUser && idx === messages.map((m) => m.role).lastIndexOf('ASSISTANT')
 
             return (
               <div
@@ -414,15 +549,23 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                           onClick={() => handleSpeak(msg.id, msg.content, msg.language)}
                           className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition ${
                             isSpeaking
-                              ? 'bg-sky-500 text-slate-950 font-semibold'
+                              ? 'bg-sky-500 text-slate-950 font-semibold shadow-sm'
+                              : isSynthesizing
+                              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-medium'
                               : 'text-slate-400 hover:text-sky-300 hover:bg-slate-700/50'
                           }`}
-                          title="Speak reply aloud (Browser Speech Synthesis)"
+                          title="Speak reply aloud (Sarvam AI / Neural Vernacular Voice)"
+                          disabled={isSynthesizing}
                         >
                           {isSpeaking ? (
                             <>
                               <VolumeX className="h-3.5 w-3.5" />
                               <span>Stop Audio</span>
+                            </>
+                          ) : isSynthesizing ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Loading Voice...</span>
                             </>
                           ) : (
                             <>
@@ -435,8 +578,8 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                     )}
                   </div>
 
-                  {/* Evidence & Investigation Panel on assistant message if available */}
-                  {!isUser && evidenceSummary && (
+                  {/* Evidence & Investigation Panel on latest assistant message if available */}
+                  {isLatestAssistant && evidenceSummary && (
                     <div className="pt-1">
                       <EvidencePanel
                         evidence={evidenceSummary}
@@ -556,24 +699,55 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
       )}
 
       {/* Suggested Quick Prompts */}
-      <div className="px-4 py-2 bg-slate-950/50 border-t border-slate-800/80 flex gap-2 overflow-x-auto text-xs">
+      <div className="px-4 py-2 bg-slate-950/50 border-t border-slate-800/80 flex gap-2 overflow-x-auto text-xs scrollbar-none">
         <button
           onClick={() => onSendMessage('My ₹6,000 payment from yesterday is missing from settlement')}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition"
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-sky-300 font-medium px-3 py-1.5 rounded-lg border border-sky-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Missing ₹6,000 from settlement
         </button>
         <button
-          onClick={() => onSendMessage('Check my latest settlement batch status')}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition"
+          onClick={() => onSendMessage('Customer was debited twice for ₹1,200 refund on Order ORD_20261111_09')}
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Check settlement status
+          Refund debited twice (₹1,200)
+        </button>
+        <button
+          onClick={() => onSendMessage('My RuPay MDR rate was charged at 2.15% instead of 1.20%')}
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          RuPay MDR fee overcharge
+        </button>
+        <button
+          onClick={() => onSendMessage('Paytm Soundbox 4G audio announcement delayed by 40s during rush hours')}
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Soundbox audio announcement delayed
+        </button>
+        <button
+          onClick={() => onSendMessage('Payout batch BATCH_20261114_03 delayed by 4 hours due to IMPS timeout (₹18,500.00)')}
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Payout delayed (₹18,500)
         </button>
         <button
           onClick={() => onSendMessage('माझे ₹६,००० चे पेमेंट सेटलमेंटमध्ये का नाही?')}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition"
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           मराठी: सेटलमेंट अडकले आहे
+        </button>
+        <button
+          onClick={() => onSendMessage('कल का ₹6,000 सेटलमेंट बैंक खाते में अभी तक नहीं आया')}
+          disabled={isSending}
+          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          हिन्दी: सेटलमेंट जांचें
         </button>
       </div>
 

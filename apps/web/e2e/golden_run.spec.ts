@@ -95,8 +95,8 @@ test.describe('OpsSaathi AI Golden Run E2E (scripts/golden_run.md)', () => {
             ok: true,
             data: {
               id: '11111111-1111-1111-1111-111111111111',
-              name: 'Two Bits Chai & Snacks',
-              business_name: 'Two Bits Chai & Snacks',
+              name: 'Paytm Smart Merchant Store',
+              business_name: 'Paytm Smart Merchant Store',
               email: 'merchant@two-bits.demo',
               phone: '+91 98765 43210',
             },
@@ -374,7 +374,7 @@ test.describe('OpsSaathi AI Golden Run E2E (scripts/golden_run.md)', () => {
     await page.waitForTimeout(300);
 
     // 3. Baseline Verification
-    await expect(page.locator('text=Two Bits Chai & Snacks').first()).toBeVisible();
+    await expect(page.locator('text=Paytm Smart Merchant Store').first()).toBeVisible();
     await expect(page.locator('text=₹6,000.00').or(page.locator('text=₹6,000')).first()).toBeVisible();
 
     // 4. Multilingual Language Switch

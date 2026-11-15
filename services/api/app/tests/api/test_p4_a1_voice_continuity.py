@@ -67,6 +67,10 @@ async def test_chat_to_voice_channel_continuity() -> None:
     """Start in chat, continue in voice: active case and conversation context are preserved."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/demo/reset",
+            headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        )
         # 1. Start complaint via chat
         chat_res = await client.post(
             "/api/v1/agent/messages",
@@ -148,3 +152,27 @@ async def test_voice_first_complaint_investigation() -> None:
         assert evidence["expected_net"] == "15000.00"
         assert evidence["observed_net"] == "9000.00"
         assert evidence["discrepancy"] == "6000.00"
+
+
+@pytest.mark.asyncio
+async def test_voice_transcription_without_existing_conversation_id() -> None:
+    """Submitting a voice transcript without conversation_id starts a new conversation seamlessly."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            "/api/v1/demo/reset",
+            headers={"Authorization": "Bearer demo-token-support_agent-1"},
+        )
+        trans_res = await client.post(
+            "/api/v1/voice/transcriptions",
+            headers={"Authorization": "Bearer demo-token-merchant-1"},
+            json={
+                "transcript": "check the missing 6000 from settlement",
+                "language": "en",
+                "generate_audio": False,
+            },
+        )
+        assert trans_res.status_code == 200
+        data = trans_res.json()["data"]
+        assert data["conversation_id"] is not None
+        assert data["reply_text"] is not None

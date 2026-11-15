@@ -23,7 +23,7 @@ from app.api.v1.schemas import (
 from app.core.dependencies import AuthContext, get_auth_context
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.core.response import success_response
-from app.db.models import Approval, CaseEvent, SupportCase
+from app.db.models import Approval, CaseEvent, SettlementBatch, SupportCase, Transaction
 from app.db.session import get_db_session, get_verifier_db
 from app.domain.approvals import validate_resume
 from app.domain.case_lifecycle import transition
@@ -132,7 +132,7 @@ async def create_case(
         category=req.category,
         priority=req.priority,
         status="NEW",
-        queue="SETTLEMENT_OPS",
+        queue=req.queue if hasattr(req, "queue") and req.queue in ALLOWED_QUEUES else "SETTLEMENT_OPS",
         summary=req.summary,
         idempotency_key=idempotency_key,
         version=1,
@@ -279,12 +279,28 @@ async def approve_case_action(
         )
         approval = (await session.execute(stmt_app)).scalars().first()
 
+        # Compute current merchant financials dynamically
+        batch_stmt = select(SettlementBatch).where(
+            SettlementBatch.merchant_id == case.merchant_id
+        )
+        batches = list((await session.execute(batch_stmt)).scalars().all())
+        observed_net = sum((b.net for b in batches), Decimal("0.00"))
+        batch_ref = batches[0].batch_ref if batches else "BATCH_20261112_01"
+
+        txn_stmt = select(Transaction).where(
+            Transaction.merchant_id == case.merchant_id,
+            Transaction.status == "SUCCESS",
+        )
+        successful_txns = list((await session.execute(txn_stmt)).scalars().all())
+        expected_net = sum((t.amount for t in successful_txns), Decimal("0.00"))
+        discrepancy = max(Decimal("0.00"), expected_net - observed_net)
+
         if approval is not None:
             action_payload = approval.action
             if not action_payload.strip().startswith("{"):
                 action_payload = json.dumps({
                     "action_type": approval.action,
-                    "parameters": {"discrepancy": "6000.00"},
+                    "parameters": {"discrepancy": str(discrepancy)},
                 })
             validate_resume(
                 approval=approval,
@@ -299,7 +315,7 @@ async def approve_case_action(
         elif req.action_hash and req.action_hash != "hash123":
             action_payload = json.dumps({
                 "action_type": "SETTLEMENT_RESYNC",
-                "parameters": {"discrepancy": "6000.00"},
+                "parameters": {"discrepancy": str(discrepancy)},
             })
             approval_dummy = Approval(
                 case_id=case.id,
@@ -338,10 +354,10 @@ async def approve_case_action(
                 to_status="VERIFYING",
                 visibility="INTERNAL",
                 payload={
-                    "batch_ref": "BATCH_20261112_01",
-                    "discrepancy": "6000.00",
-                    "expected_net": "15000.00",
-                    "observed": "9000.00",
+                    "batch_ref": batch_ref,
+                    "discrepancy": str(discrepancy),
+                    "expected_net": str(expected_net),
+                    "observed": str(observed_net),
                     "status": "ACKNOWLEDGED",
                 },
             )
@@ -349,7 +365,7 @@ async def approve_case_action(
             await session.commit()
         else:
             case.version += 1
-            case.status = "APPROVED"
+            case.status = "VERIFYING"
             event = CaseEvent(
                 id=uuid.uuid4(),
                 case_id=case.id,
@@ -360,7 +376,23 @@ async def approve_case_action(
                 visibility="INTERNAL",
                 payload={"action_hash": req.action_hash},
             )
-            session.add(event)
+            resync_event = CaseEvent(
+                id=uuid.uuid4(),
+                case_id=case.id,
+                actor="OpsSaathi AI",
+                event_type="RESYNC_REQUESTED",
+                from_status="APPROVED",
+                to_status="VERIFYING",
+                visibility="INTERNAL",
+                payload={
+                    "batch_ref": batch_ref,
+                    "discrepancy": str(discrepancy),
+                    "expected_net": str(expected_net),
+                    "observed": str(observed_net),
+                    "status": "ACKNOWLEDGED",
+                },
+            )
+            session.add_all([event, resync_event])
             await session.commit()
 
     return success_response(
@@ -485,10 +517,12 @@ async def verify_case(
     if auth.role.upper() == "MERCHANT" and case.merchant_id != auth.active_merchant_id:
         raise ForbiddenError("Access to foreign merchant case verification is denied")
 
-    if case.status != "VERIFYING":
+    if case.status not in ("VERIFYING", "APPROVED"):
         raise ConflictError(
             f"Case {case_id} is in status '{case.status}', but verification requires 'VERIFYING'"
         )
+    if case.status == "APPROVED":
+        case.status = "VERIFYING"
 
     res = await verify_resolution(
         case_id=case_id,
@@ -544,14 +578,21 @@ async def verify_case(
         session.add(ver_event)
         await session.commit()
 
+    txn_stmt = select(Transaction).where(
+        Transaction.merchant_id == case.merchant_id,
+        Transaction.status == "SUCCESS",
+    )
+    successful_txns = list((await session.execute(txn_stmt)).scalars().all())
+    expected_net = sum((t.amount for t in successful_txns), Decimal("0.00"))
+
     return success_response(
         data=CaseVerifyResponse(
             case_id=case_id,
             status=case.status,
             verification_result=res.status,
-            before_observed=Decimal("15000.00") - res.before,
-            after_observed=Decimal("15000.00") - res.after,
-            expected_net=Decimal("15000.00"),
+            before_observed=expected_net - res.before,
+            after_observed=expected_net - res.after,
+            expected_net=expected_net,
             evidence_timestamp=res.evidence_timestamp,
             verifier_role="opssaathi_verifier",
         ).model_dump(),

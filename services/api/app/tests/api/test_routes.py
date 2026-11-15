@@ -35,7 +35,7 @@ def test_merchant_route() -> None:
     data = res.json()
     assert data["ok"] is True
     assert data["data"]["id"] == str(MERCHANT_ID)
-    assert data["data"]["display_name"] == "Two Bits Chai & Snacks"
+    assert data["data"]["display_name"] == "Paytm Smart Merchant Store"
 
 
 def test_transaction_routes() -> None:

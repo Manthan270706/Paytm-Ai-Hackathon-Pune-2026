@@ -119,13 +119,13 @@ class SarvamTextToSpeech(TextToSpeech):
         body: dict[str, Any] = {
             "inputs": [text[:500]],
             "target_language_code": target_lang,
-            "speaker": "meera",
+            "speaker": "ishita",
             "pitch": 0,
             "pace": 1.0,
             "loudness": 1.5,
             "speech_sample_rate": 16000,
             "enable_preprocessing": True,
-            "model": "bulbul:v1",
+            "model": "bulbul:v3",
         }
 
         last_exc: Exception | None = None

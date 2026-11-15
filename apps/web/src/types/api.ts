@@ -115,6 +115,13 @@ export interface DiscrepancySummary {
   calculation_trace?: Record<string, any>
   limitations?: string
   next_action?: string
+  metric_1_label?: string
+  metric_2_label?: string
+  metric_3_label?: string
+  metric_1_value?: string
+  metric_2_value?: string
+  metric_3_value?: string
+  case_number?: string
 }
 
 export interface CaseEvent {

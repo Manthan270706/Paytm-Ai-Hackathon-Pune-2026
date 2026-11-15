@@ -59,7 +59,7 @@ async def test_reset_and_seed_frozen_scenario(seed_test_db) -> None:
         merchant = (
             await session.execute(select(Merchant).where(Merchant.id == MERCHANT_ID))
         ).scalar_one()
-        assert merchant.display_name == "Two Bits Chai & Snacks"
+        assert merchant.display_name == "Paytm Smart Merchant Store"
         assert merchant.status == "ACTIVE"
 
         # 4. Assert Fee Rule (0% and 0 flat)

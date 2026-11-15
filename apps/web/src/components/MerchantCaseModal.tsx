@@ -1,5 +1,6 @@
 import { useState, useEffect, FC } from 'react'
 import { CaseDetail } from '../types/api'
+import { API_BASE } from '../config'
 import {
   X,
   FileText,
@@ -37,7 +38,7 @@ export const MerchantCaseModal: FC<MerchantCaseModalProps> = ({
       try {
         setLoading(true)
         setError(null)
-        const res = await fetch(`http://localhost:8000/api/v1/cases/${caseId}`, {
+        const res = await fetch(`${API_BASE}/cases/${caseId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('Failed to load case detail')
@@ -121,14 +122,31 @@ export const MerchantCaseModal: FC<MerchantCaseModalProps> = ({
                 </div>
               </div>
 
-              {/* Resolved Banner */}
+              {/* Status Banners */}
               {caseDetail.status === 'RESOLVED' && (
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 flex items-center gap-2.5">
                   <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0" />
                   <div>
                     <span className="font-bold">Verified Resolution Confirmed: </span>
-                    The missing ₹6,000 settlement entry was credited and verified by independent
-                    read-only audit role (opssaathi_verifier).
+                    Case has been resolved and verified by independent read-only audit verifier (opssaathi_verifier).
+                  </div>
+                </div>
+              )}
+              {caseDetail.status === 'VERIFYING' && (
+                <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl text-xs text-sky-300 flex items-center gap-2.5">
+                  <ShieldCheck className="h-5 w-5 text-sky-400 shrink-0" />
+                  <div>
+                    <span className="font-bold">Independent Verification In Progress: </span>
+                    Remedial adjustments applied; undergoing cryptographic ledger verification.
+                  </div>
+                </div>
+              )}
+              {caseDetail.status === 'AWAITING_APPROVAL' && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5">
+                  <ShieldCheck className="h-5 w-5 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="font-bold">Supervisor Authorization Gated: </span>
+                    Resolution exceeds autonomous threshold and is awaiting supervisor approval before execution.
                   </div>
                 </div>
               )}
@@ -164,7 +182,7 @@ export const MerchantCaseModal: FC<MerchantCaseModalProps> = ({
                           )}
                         </div>
 
-                        <div className="flex-1 p-3 bg-slate-950/70 rounded-xl border border-slate-800/80 space-y-1">
+                        <div className="flex-1 min-w-0 p-3 bg-slate-950/70 rounded-xl border border-slate-800/80 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="font-mono font-bold text-sky-300">
                               {ev.event_type}
@@ -185,11 +203,11 @@ export const MerchantCaseModal: FC<MerchantCaseModalProps> = ({
                           </div>
 
                           {ev.payload && Object.keys(ev.payload).length > 0 && (
-                            <div className="mt-1 pt-1 font-mono text-[10px] text-slate-400 bg-slate-900/40 p-2 rounded-lg">
+                            <div className="mt-1 pt-1 font-mono text-[10px] text-slate-400 bg-slate-900/40 p-2 rounded-lg space-y-1 overflow-hidden">
                               {Object.entries(ev.payload).map(([k, v]) => (
-                                <div key={k} className="truncate">
-                                  <span className="text-slate-500">{k}:</span>{' '}
-                                  <span className="text-slate-300">
+                                <div key={k} className="break-words [overflow-wrap:anywhere] leading-relaxed">
+                                  <span className="text-slate-500 font-semibold">{k}:</span>{' '}
+                                  <span className="text-slate-300 break-words [overflow-wrap:anywhere]">
                                     {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                                   </span>
                                 </div>

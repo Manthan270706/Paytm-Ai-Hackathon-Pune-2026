@@ -12,7 +12,7 @@ from app.api.v1.schemas import AgentMessageRequest, AgentMessageResponse
 from app.core.dependencies import AuthContext, get_auth_context
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.response import success_response
-from app.db.models import AgentRun, Conversation, ToolExecution
+from app.db.models import AgentRun, Conversation, Message, ToolExecution
 from app.db.seed import MERCHANT_ID
 from app.db.session import get_db_session
 
@@ -122,3 +122,47 @@ async def stream_agent_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+@router.get("/agent/conversations/active/messages", summary="Fetch history for active conversation")
+async def get_active_conversation_messages(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    merchant_id = auth.active_merchant_id or MERCHANT_ID
+    conv_stmt = (
+        select(Conversation)
+        .where(Conversation.merchant_id == merchant_id)
+        .order_by(Conversation.created_at.desc())
+    )
+    conv = (await session.execute(conv_stmt)).scalars().first()
+    if not conv:
+        return success_response(
+            data={"conversation_id": None, "messages": []},
+            source_type="SYNTHETIC_DEMO",
+        )
+
+    msg_stmt = (
+        select(Message)
+        .where(Message.conversation_id == conv.id)
+        .order_by(Message.created_at.asc())
+    )
+    messages = list((await session.execute(msg_stmt)).scalars().all())
+
+    items = [
+        {
+            "id": str(m.id),
+            "role": m.role,
+            "content": m.content,
+            "language": m.language,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "channel": conv.channel,
+        }
+        for m in messages
+    ]
+
+    return success_response(
+        data={"conversation_id": str(conv.id), "messages": items},
+        source_type="SYNTHETIC_DEMO",
+    )
+

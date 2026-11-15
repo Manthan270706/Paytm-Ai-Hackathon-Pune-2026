@@ -137,7 +137,7 @@ class VoiceSessionResponse(BaseModel):
 
 
 class VoiceTranscriptionRequest(BaseModel):
-    conversation_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None
     transcript: str
     language: str = "en"
     generate_audio: bool = False
@@ -184,6 +184,7 @@ class VoiceTranscribeAudioResponse(BaseModel):
 class CaseCreateRequest(BaseModel):
     category: str = "SETTLEMENT_MISMATCH"
     priority: str = "P1"
+    queue: str = "SETTLEMENT_OPS"
     summary: str
     evidence_refs: dict[str, Any] | None = None
 

@@ -8,7 +8,7 @@ This runbook defines the exact step-by-step end-to-end execution path for judgin
 
 | Metric / Attribute | Value | Provenance / Rule |
 | :--- | :--- | :--- |
-| **Merchant Name** | Two Bits Chai & Snacks | Seeded profile (`MID_DEMO_TWOBITS`) |
+| **Merchant Name** | Paytm Smart Merchant Store | Seeded profile (`MID_DEMO_TWOBITS`) |
 | **Merchant UUID** | `11111111-1111-1111-1111-111111111111` | Deterministic UUID |
 | **Eligible Payments** | ₹15,000.00 | 3 Txns: ₹5,000 (`TXN_78456319`), ₹4,000 (`TXN_78456320`), ₹6,000 (`TXN_78456321`) |
 | **Observed in Ledger** | ₹9,000.00 | Batch `BATCH_20261112_01` has Txn 1 and Txn 2 only |
@@ -45,7 +45,7 @@ This runbook defines the exact step-by-step end-to-end execution path for judgin
 - **Action**: Start merchant demo session.
   - API: `POST /api/v1/auth/demo-login` with payload `{"role": "merchant"}`
 - **Expected Result**:
-  - Bearer token issued for `merchant@two-bits.demo` bound to tenant `Two Bits Chai & Snacks`.
+  - Bearer token issued for `merchant@two-bits.demo` bound to tenant `Paytm Smart Merchant Store`.
   - Dashboard shows: Expected ₹15,000, Settled ₹9,000, Discrepancy ₹6,000.
 
 ### Step 3: Merchant Complaint (Multilingual Chat or Voice)
@@ -77,7 +77,7 @@ This runbook defines the exact step-by-step end-to-end execution path for judgin
   - API: `POST /api/v1/auth/demo-login` with `{"role": "support_agent"}`
   - GET `/api/v1/cases/pending-approval`
 - **Expected Result**:
-  - Support dashboard displays pending re-sync for ₹6,000.00 on `Two Bits Chai & Snacks`.
+  - Support dashboard displays pending re-sync for ₹6,000.00 on `Paytm Smart Merchant Store`.
   - Human reviewer reviews evidence trace and clicks **Approve**.
   - `POST /api/v1/cases/{case_id}/approve`
   - Workflow resumes:

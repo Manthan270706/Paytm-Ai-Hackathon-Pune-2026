@@ -8,6 +8,7 @@ interface ApprovalModalProps {
   onClose: () => void
   caseItem: SupportCaseItem | null
   pendingApproval: ApprovalSummary | null
+  discrepancyAmount?: string
   onConfirmApprove: (caseId: string, version: number, actionHash: string) => Promise<void>
   isApproving: boolean
 }
@@ -17,6 +18,7 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
   onClose,
   caseItem,
   pendingApproval,
+  discrepancyAmount,
   onConfirmApprove,
   isApproving,
 }) => {
@@ -25,6 +27,8 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
   const actionHash =
     pendingApproval?.action_hash ||
     '44efa879046efa3a441c61673e778f5ed3cb2adec16c9d57ca0f88b6139a2e02'
+
+  const formattedDiscrepancy = discrepancyAmount || '6,000.00'
 
   const handleApprove = async () => {
     await onConfirmApprove(caseItem.id, caseItem.version, actionHash)
@@ -63,9 +67,8 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
           <div>
             <span className="font-semibold text-amber-200">Policy Gate Triggered: </span>
-            The autonomous agent computed an overdue discrepancy of ₹6,000.00. Per Policy Rule
-            #3, automated settlement re-sync requests exceeding the ₹5,000 threshold require
-            explicit human supervisor authorization.
+            The autonomous agent computed an operational action ({pendingApproval?.action || 'SETTLEMENT_RESYNC'}) with value ₹{formattedDiscrepancy}. Per Policy Rule
+            #3, automated actions exceeding the ₹5,000 threshold require explicit human supervisor authorization.
           </div>
         </div>
 
@@ -76,20 +79,31 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                 Action Type
               </span>
-              <div className="font-mono font-bold text-purple-400 text-sm">SETTLEMENT_RESYNC</div>
+              <div className="font-mono font-bold text-purple-400 text-sm">
+                {pendingApproval?.action || 'SETTLEMENT_RESYNC'}
+              </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
                 <span>Target:</span>
-                <SourceBadge source="MOCK_SETTLEMENT_OPS" size="sm" />
+                <SourceBadge
+                  source={
+                    caseItem.queue === 'TECH_SUPPORT'
+                      ? 'MOCK_HARDWARE_IOT'
+                      : caseItem.queue === 'ESCALATIONS'
+                      ? 'MOCK_BANK_IMPS'
+                      : 'MOCK_SETTLEMENT_OPS'
+                  }
+                  size="sm"
+                />
               </div>
             </div>
 
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                Discrepancy Amount
+                Amount / Discrepancy
               </span>
-              <div className="font-mono font-bold text-amber-400 text-sm">₹6,000.00</div>
+              <div className="font-mono font-bold text-amber-400 text-sm">₹{formattedDiscrepancy}</div>
               <div className="text-[11px] text-slate-400 mt-1">
-                Status: <span className="text-rose-400 font-semibold">OVERDUE</span>
+                Status: <span className="text-amber-400 font-semibold">{caseItem.status}</span>
               </div>
             </div>
           </div>
@@ -136,7 +150,7 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
             className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold text-xs transition shadow-lg shadow-emerald-600/25 disabled:opacity-50"
           >
             <CheckCircle2 className={`h-4 w-4 ${isApproving ? 'animate-spin' : ''}`} />
-            <span>{isApproving ? 'Resuming Action...' : 'Confirm & Authorize Re-Sync'}</span>
+            <span>{isApproving ? 'Resuming Action...' : `Confirm & Authorize ${pendingApproval?.action || 'Action'}`}</span>
           </button>
         </div>
       </div>

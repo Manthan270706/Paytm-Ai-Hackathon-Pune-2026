@@ -32,7 +32,7 @@ async def test_p3_a1_investigation_tools_direct() -> None:
 
         # 1. get_merchant_context
         ctx_out = await run_get_merchant_context(GetMerchantContextInput(), ctx)
-        assert ctx_out.display_name == "Two Bits Chai & Snacks"
+        assert ctx_out.display_name == "Paytm Smart Merchant Store"
         assert ctx_out.status == "ACTIVE"
         assert ctx_out.source_type == "SYNTHETIC_DEMO"
 
@@ -152,3 +152,154 @@ def test_p3_a1_investigation_multilingual_marathi() -> None:
     # Marathi reply verification
     reply = data["reply"]
     assert "सेटलमेंट" in reply or "नोंदी" in reply
+
+
+def test_p3_a1_investigation_refund_dispute() -> None:
+    """Test investigation for refund dispute: debited twice on Order ORD_20261111_09."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "Customer was debited twice for ₹1,200 refund on Order ORD_20261111_09",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "REFUND_DISPUTE"
+    evidence = data["evidence_summary"]
+    assert evidence["discrepancy"] == "1200.00"
+    assert evidence["reason_code"] == "DUPLICATE_DEBIT"
+    assert evidence["metric_1_label"] == "Original Refund"
+    assert "1200" in data["reply"]
+    assert "ORD_20261111_09" in data["reply"]
+    # Ensure it's not the ₹6,000 settlement text
+    assert "6000" not in data["reply"]
+
+
+def test_p3_a1_investigation_fee_overcharge() -> None:
+    """Test investigation for RuPay MDR fee overcharge."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "My RuPay MDR rate was charged at 2.15% instead of 1.20%",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "FEE_OVERCHARGE"
+    evidence = data["evidence_summary"]
+    assert evidence["discrepancy"] == "850.00"
+    assert evidence["reason_code"] == "MDR_RATE_MISMATCH"
+    assert evidence["metric_1_label"] == "Contract Rate"
+    assert "850" in data["reply"]
+    assert "2.15%" in data["reply"]
+
+
+def test_p3_a1_investigation_hardware_diagnostics() -> None:
+    """Test investigation for Soundbox 4G diagnostics."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "Paytm Soundbox 4G audio announcement delayed by 40s during rush hours",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "HARDWARE_DIAGNOSTICS"
+    evidence = data["evidence_summary"]
+    assert evidence["reason_code"] == "TELEMETRY_RESOLVED"
+    assert "Soundbox" in data["reply"] or "soundbox" in data["reply"].lower()
+
+
+def test_p3_a1_investigation_payout_delay() -> None:
+    """Test investigation for bank holiday payout delay."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "T+1 bank holiday hold exceeded 48h SLA for weekend batch (₹18,500.00)",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "PAYOUT_DELAY"
+    evidence = data["evidence_summary"]
+    assert evidence["discrepancy"] == "18500.00"
+    assert evidence["reason_code"] == "SLA_BREACH_HOLD"
+    assert "18500" in data["reply"]
+
+
+def test_p3_a1_investigation_greeting_english() -> None:
+    """Verify casual greeting 'Hi' returns natural AI greeting without fake settlement audit."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "Hi",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "GREETING"
+    assert data["evidence_summary"] is None
+    assert data["active_case_id"] is None
+    assert "OpsSaathi" in data["reply"]
+    # Ensure no fake settlement mismatch or batch reference is claimed
+    assert "BATCH_20261112_01" not in data["reply"]
+
+
+def test_p3_a1_investigation_greeting_hindi() -> None:
+    """Verify Hindi greeting 'नमस्ते' returns warm Hindi greeting without evidence card."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "नमस्ते",
+            "language": "hi",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] == "GREETING"
+    assert data["evidence_summary"] is None
+    assert data["active_case_id"] is None
+    assert "ऑप्ससाथी" in data["reply"] or "OpsSaathi" in data["reply"]
+
+
+def test_p3_a1_investigation_general_query() -> None:
+    """Verify capabilities question returns helpful overview without evidence card."""
+    res = client.post(
+        "/api/v1/agent/messages",
+        headers={"Authorization": "Bearer demo-token-merchant-1"},
+        json={
+            "message": "What can you do to help me?",
+            "language": "en",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    data = body["data"]
+
+    assert data["intent"] in {"GENERAL_QUERY", "GREETING"}
+    assert data["evidence_summary"] is None
+    assert data["active_case_id"] is None
+    assert "OpsSaathi" in data["reply"]

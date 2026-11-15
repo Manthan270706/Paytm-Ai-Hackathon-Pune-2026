@@ -171,7 +171,13 @@ def check_no_string_built_sql(code_dir: Path) -> list[str]:
     )
 
     for py_file in code_dir.rglob("*.py"):
-        if "test" in py_file.name or "test" in str(py_file):
+        norm_str = str(py_file).replace("\\", "/")
+        if (
+            py_file.name.startswith("test_")
+            or py_file.name.endswith("_test.py")
+            or "/tests/" in norm_str
+            or "/app/tests/" in norm_str
+        ):
             continue
         try:
             content = py_file.read_text(encoding="utf-8")

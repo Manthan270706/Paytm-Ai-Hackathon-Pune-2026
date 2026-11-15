@@ -61,11 +61,18 @@ async def test_drill_01_llm_timeout_and_quota_fallback() -> None:
     """Drill 1: LLM timeout/quota triggers bounded retry then cache/mock fallback."""
     provider = FallbackLLMProvider()
 
-    # Simulate Gemini failing with Timeout or 429 quota exhaustion
-    with patch.object(
-        provider.gemini,
-        "generate_structured",
-        side_effect=httpx.TimeoutException("ReadTimeout during Gemini call"),
+    # Simulate cloud providers failing with Timeout or 429 quota exhaustion
+    with (
+        patch.object(
+            provider.gemini,
+            "generate_structured",
+            side_effect=httpx.TimeoutException("ReadTimeout during Gemini call"),
+        ),
+        patch.object(
+            provider.groq,
+            "generate_structured",
+            side_effect=httpx.TimeoutException("ReadTimeout during Groq call"),
+        ),
     ):
         res = await provider.generate_structured(
             prompt="My ₹6,000 payment is missing from settlement.",

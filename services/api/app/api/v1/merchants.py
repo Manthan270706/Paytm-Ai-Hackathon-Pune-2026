@@ -11,7 +11,7 @@ from app.api.v1.schemas import MerchantSummaryResponse
 from app.core.dependencies import AuthContext, get_auth_context, get_scoped_repo
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.response import success_response
-from app.db.models import Merchant, SupportCase
+from app.db.models import Merchant, SettlementBatch, SupportCase, Transaction
 from app.db.scoped_repository import ScopedRepository
 from app.db.session import get_db_session
 
@@ -43,15 +43,29 @@ async def get_merchant(
     if not merchant or merchant.id != merchant_id:
         # If in demo mode and merchant_id matches, return demo profile
         if merchant_id == auth.active_merchant_id:
+            txn_stmt = select(Transaction).where(
+                Transaction.merchant_id == merchant_id,
+                Transaction.status == "SUCCESS",
+            )
+            successful_txns = list((await session.execute(txn_stmt)).scalars().all())
+            expected_net = sum((t.amount for t in successful_txns), Decimal("0.00"))
+
+            batch_stmt = select(SettlementBatch).where(
+                SettlementBatch.merchant_id == merchant_id
+            )
+            batches = list((await session.execute(batch_stmt)).scalars().all())
+            observed_net = sum((b.net for b in batches), Decimal("0.00"))
+            pending_amt = max(Decimal("0.00"), expected_net - observed_net)
+
             return success_response(
                 data=MerchantSummaryResponse(
                     id=merchant_id,
                     external_mid="MID_DEMO_TWOBITS",
-                    display_name="Two Bits Chai & Snacks",
+                    display_name="Paytm Smart Merchant Store",
                     masked_phone="+91-98765-43210",
                     status="ACTIVE",
                     created_at=datetime.now(UTC),
-                    pending_settlement_amount=Decimal("6000.00"),
+                    pending_settlement_amount=pending_amt,
                     open_cases_count=1,
                 ).model_dump(),
                 source_type="SYNTHETIC_DEMO",
@@ -75,6 +89,21 @@ async def get_merchant(
     )
     open_cases = len((await session.execute(case_stmt)).scalars().all())
 
+    # Calculate pending settlement amount dynamically
+    txn_stmt = select(Transaction).where(
+        Transaction.merchant_id == merchant.id,
+        Transaction.status == "SUCCESS",
+    )
+    successful_txns = list((await session.execute(txn_stmt)).scalars().all())
+    expected_net = sum((t.amount for t in successful_txns), Decimal("0.00"))
+
+    batch_stmt = select(SettlementBatch).where(
+        SettlementBatch.merchant_id == merchant.id
+    )
+    batches = list((await session.execute(batch_stmt)).scalars().all())
+    observed_net = sum((b.net for b in batches), Decimal("0.00"))
+    pending_settlement = max(Decimal("0.00"), expected_net - observed_net)
+
     return success_response(
         data=MerchantSummaryResponse(
             id=merchant.id,
@@ -83,7 +112,7 @@ async def get_merchant(
             masked_phone=merchant.masked_phone,
             status=merchant.status,
             created_at=merchant.created_at,
-            pending_settlement_amount=Decimal("6000.00"),
+            pending_settlement_amount=pending_settlement,
             open_cases_count=open_cases,
         ).model_dump(),
         source_type="SYNTHETIC_DEMO",

@@ -1,10 +1,18 @@
 from decimal import Decimal
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[4] / ".env"
+_API_DIR_ENV = Path(__file__).resolve().parents[2] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(_REPO_ROOT_ENV, _API_DIR_ENV, ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     APP_ENV: str = "development"
     FRONTEND_ORIGIN: str = "http://localhost:5173"
@@ -17,8 +25,18 @@ class Settings(BaseSettings):
     )
 
     # Providers
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "groq"
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+
+    # Local LLM (Ollama / Local OpenAI compatible)
+    LOCAL_LLM_ENABLED: bool = True
+    LOCAL_LLM_BASE_URL: str = "http://localhost:11434/v1"
+    LOCAL_LLM_MODEL: str = "qwen2.5:3b"
+
     GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
     SARVAM_API_KEY: str | None = None
 
     # Paytm Staging

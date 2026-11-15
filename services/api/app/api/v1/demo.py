@@ -40,7 +40,7 @@ async def simulate_settlement(
         id=audit_id,
         actor=auth.user.email,
         action="DEMO_SIMULATE_SETTLEMENT",
-        resource="settlement_batches/BATCH_20261112_01",
+        resource=f"settlement_batches/{req.batch_ref}",
         trace_id=str(audit_id),
         payload={
             "amount": str(result["amount"]),
@@ -55,7 +55,7 @@ async def simulate_settlement(
 
     return success_response(
         data=SimulateSettlementResponse(
-            message="Bank settlement simulation applied. ₹6,000 entry credited to synthetic batch.",
+            message=f"Bank settlement simulation applied. ₹{result['amount']} entry credited to batch {req.batch_ref}.",
             added_entry_id=result["entry_id"],
             amount=result["amount"],
             source_type=result["source_type"],
