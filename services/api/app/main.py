@@ -2,10 +2,13 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import DBAPIError, OperationalError
 from starlette.responses import Response
 
@@ -61,7 +64,14 @@ async def request_id_middleware(request: Request, call_next: Callable[[Request],
 # ------------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        settings.FRONTEND_ORIGIN,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+    ],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,16 +94,30 @@ app.include_router(watchdog_router, prefix="/api/v1", tags=["Watchdog"])
 app.include_router(webhooks_router, prefix="/api/v1", tags=["Webhooks"])
 
 
-@app.get("/")
-async def root() -> dict:
-    return {
-        "name": "OpsSaathi AI API",
-        "version": "1.1.0",
-        "track": "Track 3: Autonomous AI Teammates",
-        "docs": "/docs",
-        "health": "/api/v1/health",
-        "openapi": "/api/v1/openapi.json",
-    }
+# ------------------------------------------------------------------------------
+# Frontend Static Files (Unified Monorepo / Railway) or API Root Fallback
+# ------------------------------------------------------------------------------
+_static_candidates = [
+    Path("/app/static"),
+    Path(__file__).resolve().parent.parent.parent / "static",
+    Path(__file__).resolve().parent.parent.parent.parent / "apps" / "web" / "dist",
+]
+_static_dir = next((p for p in _static_candidates if p.exists() and (p / "index.html").exists()), None)
+
+if _static_dir:
+    app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")
+else:
+    @app.get("/")
+    async def root() -> dict:
+        return {
+            "name": "OpsSaathi AI API",
+            "version": "1.1.0",
+            "track": "Track 3: Autonomous AI Teammates",
+            "docs": "/docs",
+            "health": "/api/v1/health",
+            "openapi": "/api/v1/openapi.json",
+        }
+
 
 
 # ------------------------------------------------------------------------------

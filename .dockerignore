@@ -1,0 +1,12 @@
+node_modules
+apps/web/node_modules
+apps/web/dist
+.git
+.github
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.worktrees
+docs/design/refs
