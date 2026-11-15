@@ -24,13 +24,16 @@ class Settings(BaseSettings):
         "postgresql+psycopg://verifier_ro:password@localhost:5432/opssaathi"
     )
 
-    # Providers
+    # Providers & Cascade
     LLM_PROVIDER: str = "groq"
+    LLM_CASCADE: str = "groq,ollama,cache,mock"
     GROQ_API_KEY: str | None = None
     GROQ_MODEL: str = "llama-3.1-8b-instant"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
-    # Local LLM (Ollama / Local OpenAI compatible)
+    # Local LLM (Ollama)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5:3b"
     LOCAL_LLM_ENABLED: bool = True
     LOCAL_LLM_BASE_URL: str = "http://localhost:11434/v1"
     LOCAL_LLM_MODEL: str = "qwen2.5:3b"

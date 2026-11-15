@@ -100,25 +100,40 @@ class GeminiLLMProvider(LLMProvider):
 
 
 class FallbackLLMProvider(LLMProvider):
-    """Reliability Fallback Chain (PRD §12.2, §12.3).
+    """Reliability Fallback Chain (PRD §12.2, §12.3, UPSCALE Phase U1).
 
-    Chain Order:
-    1. Local LLM (if enabled and running locally via Ollama / LM Studio)
-    2. Groq Cloud LPU (if GROQ_API_KEY is configured)
-    3. Gemini Live API (if GEMINI_API_KEY is configured)
+    Configurable cascade order via LLM_CASCADE env var (e.g. 'groq,ollama,cache,mock').
+    Chain Order (Default):
+    1. Groq Cloud LPU (if GROQ_API_KEY is configured)
+    2. Local Ollama LLM (zero-network offline inference via Qwen 2.5 3B)
+    3. Gemini Live API (optional fallback if configured)
     4. Deterministic LLM Cache & Golden Recorded Fixtures
     5. Safe Mock Provider Fallback
     """
 
     def __init__(self, api_key: str | None = None) -> None:
         from app.integrations.groq.provider import GroqLLMProvider, LocalLLMProvider
+        from app.integrations.ollama.provider import OllamaLLMProvider
 
-        self.local = LocalLLMProvider()
+        self.ollama = OllamaLLMProvider()
+        self.local = self.ollama  # Alias for backward compatibility
         self.groq = GroqLLMProvider()
         self.gemini = GeminiLLMProvider(api_key=api_key or getattr(settings, "GEMINI_API_KEY", None))
         self.mock = MockLLMProvider()
-        self.last_served_from: str = "MOCK"  # "LOCAL", "GROQ", "LIVE", "CACHE", "MOCK"
+        self.last_served_from: str = "MOCK"  # "OLLAMA", "LOCAL", "GROQ", "LIVE", "CACHE", "MOCK"
         self.last_was_replay: bool = False
+        self.tier_history: list[dict[str, Any]] = []
+
+    @property
+    def cascade_tiers(self) -> list[str]:
+        raw = getattr(settings, "LLM_CASCADE", "groq,ollama,cache,mock")
+        return [t.strip().lower() for t in raw.split(",") if t.strip()]
+
+    async def warmup(self) -> bool:
+        """Startup warm-up call to prime local and cloud LLM tiers."""
+        if "ollama" in self.cascade_tiers:
+            return await self.ollama.warmup()
+        return True
 
     async def generate_structured(
         self,
@@ -129,6 +144,7 @@ class FallbackLLMProvider(LLMProvider):
         session: Any = None,
     ) -> T:
         schema_name = schema.__name__
+        self.tier_history = []
 
         # Mode A: DEMO_DETERMINISTIC=True (Reliability Mode per PRD §12.3)
         if settings.DEMO_DETERMINISTIC:
@@ -142,30 +158,10 @@ class FallbackLLMProvider(LLMProvider):
             if cached is not None:
                 self.last_served_from = "CACHE"
                 self.last_was_replay = True
+                self.tier_history.append({"tier": "cache", "status": "SERVED"})
                 return schema.model_validate(cached)
 
-            # 2. If local or cloud available, attempt live with temperature 0 and cache response
-            if getattr(settings, "LOCAL_LLM_ENABLED", False) and await self.local.is_available():
-                try:
-                    res = await self.local.generate_structured(
-                        prompt=prompt,
-                        schema=schema,
-                        system_prompt=system_prompt,
-                        temperature=0.0,
-                    )
-                    await store_cached_llm_response(
-                        prompt=prompt,
-                        schema_name=schema_name,
-                        response_json=res.model_dump(),
-                        system_prompt=system_prompt,
-                        session=session,
-                    )
-                    self.last_served_from = "LOCAL"
-                    self.last_was_replay = False
-                    return res
-                except Exception as e:
-                    logger.debug(f"Deterministic live Local LLM attempt skipped: {e}")
-
+            # 2. If live tiers available, attempt with temperature 0 and cache response
             if getattr(settings, "GROQ_API_KEY", None):
                 try:
                     res = await self.groq.generate_structured(
@@ -183,13 +179,15 @@ class FallbackLLMProvider(LLMProvider):
                     )
                     self.last_served_from = "GROQ"
                     self.last_was_replay = False
+                    self.tier_history.append({"tier": "groq", "status": "SERVED"})
                     return res
                 except Exception as e:
                     logger.debug(f"Deterministic live Groq attempt skipped: {e}")
+                    self.tier_history.append({"tier": "groq", "status": "FAILED", "error": str(e)})
 
-            if getattr(settings, "GEMINI_API_KEY", None):
+            if await self.ollama.is_available():
                 try:
-                    res = await self.gemini.generate_structured(
+                    res = await self.ollama.generate_structured(
                         prompt=prompt,
                         schema=schema,
                         system_prompt=system_prompt,
@@ -202,15 +200,18 @@ class FallbackLLMProvider(LLMProvider):
                         system_prompt=system_prompt,
                         session=session,
                     )
-                    self.last_served_from = "LIVE"
+                    self.last_served_from = "OLLAMA"
                     self.last_was_replay = False
+                    self.tier_history.append({"tier": "ollama", "status": "SERVED"})
                     return res
                 except Exception as e:
-                    logger.debug(f"Deterministic live Gemini attempt skipped: {e}")
+                    logger.debug(f"Deterministic live Ollama attempt skipped: {e}")
+                    self.tier_history.append({"tier": "ollama", "status": "FAILED", "error": str(e)})
 
             # 3. Fallback to mock
             self.last_served_from = "MOCK"
             self.last_was_replay = True
+            self.tier_history.append({"tier": "mock", "status": "SERVED"})
             return await self.mock.generate_structured(
                 prompt=prompt,
                 schema=schema,
@@ -218,74 +219,99 @@ class FallbackLLMProvider(LLMProvider):
                 temperature=0.0,
             )
 
-        # Mode B: Standard Live Flow
-        # Tier 1: Local LLM (if enabled and online)
-        if getattr(settings, "LOCAL_LLM_ENABLED", False):
-            if await self.local.is_available():
+        # Mode B: Dynamic LLM_CASCADE Execution
+        for tier in self.cascade_tiers:
+            # 1. Groq Cloud LPU
+            if tier in {"groq", "groq_cloud"}:
+                if not getattr(settings, "GROQ_API_KEY", None):
+                    self.tier_history.append({"tier": "groq", "status": "SKIPPED_NO_KEY"})
+                    continue
                 try:
-                    res = await self.local.generate_structured(
+                    res = await self.groq.generate_structured(
                         prompt=prompt,
                         schema=schema,
                         system_prompt=system_prompt,
                         temperature=temperature,
                     )
-                    self.last_served_from = "LOCAL"
+                    self.last_served_from = "GROQ"
                     self.last_was_replay = False
+                    self.tier_history.append({"tier": "groq", "status": "SERVED"})
                     return res
                 except Exception as e:
-                    logger.warning(
-                        f"Local LLM call failed ({e}); falling back to Groq Cloud"
+                    logger.warning(f"Groq cascade call failed ({e}); evaluating next tier")
+                    self.tier_history.append({"tier": "groq", "status": "FAILED", "error": str(e)})
+
+            # 2. Local Ollama LLM
+            elif tier in {"ollama", "local", "local_llm"}:
+                if not await self.ollama.is_available():
+                    self.tier_history.append({"tier": "ollama", "status": "SKIPPED_OFFLINE"})
+                    continue
+                try:
+                    res = await self.ollama.generate_structured(
+                        prompt=prompt,
+                        schema=schema,
+                        system_prompt=system_prompt,
+                        temperature=temperature,
                     )
+                    self.last_served_from = "OLLAMA"
+                    self.last_was_replay = False
+                    self.tier_history.append({"tier": "ollama", "status": "SERVED"})
+                    return res
+                except Exception as e:
+                    logger.warning(f"Ollama local call failed ({e}); evaluating next tier")
+                    self.tier_history.append({"tier": "ollama", "status": "FAILED", "error": str(e)})
 
-        # Tier 2: Groq Cloud LPU
-        if getattr(settings, "GROQ_API_KEY", None):
-            try:
-                res = await self.groq.generate_structured(
+            # 3. Gemini Live
+            elif tier in {"gemini", "gemini_live"}:
+                if not getattr(settings, "GEMINI_API_KEY", None):
+                    self.tier_history.append({"tier": "gemini", "status": "SKIPPED_NO_KEY"})
+                    continue
+                try:
+                    res = await self.gemini.generate_structured(
+                        prompt=prompt,
+                        schema=schema,
+                        system_prompt=system_prompt,
+                        temperature=temperature,
+                    )
+                    self.last_served_from = "LIVE"
+                    self.last_was_replay = False
+                    self.tier_history.append({"tier": "gemini", "status": "SERVED"})
+                    return res
+                except Exception as e:
+                    logger.warning(f"Gemini live call failed ({e}); evaluating next tier")
+                    self.tier_history.append({"tier": "gemini", "status": "FAILED", "error": str(e)})
+
+            # 4. Deterministic Cache
+            elif tier in {"cache", "llm_cache"}:
+                cached = await get_cached_llm_response(
+                    prompt=prompt,
+                    schema_name=schema_name,
+                    system_prompt=system_prompt,
+                    session=session,
+                )
+                if cached is not None:
+                    self.last_served_from = "CACHE"
+                    self.last_was_replay = True
+                    self.tier_history.append({"tier": "cache", "status": "SERVED"})
+                    return schema.model_validate(cached)
+                self.tier_history.append({"tier": "cache", "status": "MISS"})
+
+            # 5. Safe Mock Provider Fallback
+            elif tier in {"mock", "safe_mock"}:
+                self.last_served_from = "MOCK"
+                self.last_was_replay = False
+                self.tier_history.append({"tier": "mock", "status": "SERVED"})
+                return await self.mock.generate_structured(
                     prompt=prompt,
                     schema=schema,
                     system_prompt=system_prompt,
                     temperature=temperature,
                 )
-                self.last_served_from = "GROQ"
-                self.last_was_replay = False
-                return res
-            except Exception as e:
-                logger.warning(
-                    f"Groq live call failed ({e}); falling back to next provider"
-                )
 
-        # Tier 3: Gemini Live
-        if getattr(settings, "GEMINI_API_KEY", None):
-            try:
-                res = await self.gemini.generate_structured(
-                    prompt=prompt,
-                    schema=schema,
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                )
-                self.last_served_from = "LIVE"
-                self.last_was_replay = False
-                return res
-            except Exception as e:
-                logger.warning(
-                    f"Gemini live call failed ({e}); falling back to deterministic cache"
-                )
-
-        # Tier 4: Fallback to Cache
-        cached = await get_cached_llm_response(
-            prompt=prompt,
-            schema_name=schema_name,
-            system_prompt=system_prompt,
-            session=session,
-        )
-        if cached is not None:
-            self.last_served_from = "CACHE"
-            self.last_was_replay = True
-            return schema.model_validate(cached)
-
-        # Tier 5: Final Fallback to Safe Mock
+        # Final guarantee fallback if all configured cascade tiers exhausted
         self.last_served_from = "MOCK"
         self.last_was_replay = False
+        self.tier_history.append({"tier": "mock", "status": "EXHAUSTION_FALLBACK"})
         return await self.mock.generate_structured(
             prompt=prompt,
             schema=schema,
