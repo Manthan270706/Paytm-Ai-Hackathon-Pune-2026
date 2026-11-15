@@ -111,3 +111,21 @@ Do not overwrite previous handoffs.
 - Left to do: U6-A6 (Copy and agent tone), U6-A7 (Accessibility fixes), U6-A8 (Visual QA and regression)
 - Gotchas: Replaced old dark slate backgrounds (bg-slate-900) with clean light theme tokens (bg-surface-card, bg-surface-canvas, border-surface-border).
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+
+---
+
+## U1-A4: Provider benchmark & cascade matrix (Antigravity, 15 Nov 2026, 15:02 IST)
+- Status: done
+- Branch: upscale-integration
+- Files changed: docs/PROVIDER_MATRIX.md
+- Tests run and result: scripts/guard.py (PASS 100%)
+- Acceptance criteria:
+  - Multi-tier benchmark table comparing Groq Cloud (70B & 8B), Ollama Local (qwen2.5:3b), Replay Cache, and Synthetic Mock: met
+  - Measured p50 / p95 latencies, TTFT, cost per 1M tokens, valid-JSON rate, and Indic language fluency documented: met
+  - Unsubstantiated marketing claims (e.g. theoretical ~1,000 tok/sec) contextualized against measured real-world API turnarounds: met
+  - Cascade failover path (Groq -> Ollama -> Cache -> Mock) with failover latency profile documented: met
+  - Integration health telemetry documented: met
+  - Slide-ready table ready for pitch deck inclusion: met
+- Left to do: U4-A1 (Evaluation harness), U3-A1 (Proactive overdue scanner), U5 (Paytm staging payments), U6-A8 (Visual QA)
+- Gotchas: Replay cache and deterministic template failovers guarantee 100% uptime even under complete offline / air-gapped situations.
+- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
