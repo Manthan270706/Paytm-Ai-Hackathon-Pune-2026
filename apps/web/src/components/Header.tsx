@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { UserRole } from '../types/api'
-import { Languages, Shield, User, RotateCcw, Activity } from 'lucide-react'
+import { Languages, Shield, User, RotateCcw, Activity, LayoutGrid } from 'lucide-react'
 
 interface HeaderProps {
   currentRole: UserRole
@@ -11,6 +11,7 @@ interface HeaderProps {
   isResetting: boolean
   isReplayMode?: boolean
   onOpenHealth?: () => void
+  onOpenCatalog?: () => void
 }
 
 export const Header: FC<HeaderProps> = ({
@@ -22,6 +23,7 @@ export const Header: FC<HeaderProps> = ({
   isResetting,
   isReplayMode = false,
   onOpenHealth,
+  onOpenCatalog,
 }) => {
   return (
     <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
@@ -87,6 +89,18 @@ export const Header: FC<HeaderProps> = ({
             >
               <Activity className="h-3.5 w-3.5 text-cyan-400" />
               <span>Health</span>
+            </button>
+          )}
+
+          {/* Design Catalog Button */}
+          {onOpenCatalog && (
+            <button
+              onClick={onOpenCatalog}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700/80 text-paytm-cyan border border-paytm-cyan/30 rounded-lg px-3 py-1.5 text-xs font-medium transition shadow-sm"
+              title="View design tokens and primitive UI components"
+            >
+              <LayoutGrid className="h-3.5 w-3.5 text-paytm-cyan" />
+              <span>Catalog</span>
             </button>
           )}
 

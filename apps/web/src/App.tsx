@@ -19,6 +19,7 @@ import { ChatWorkspace } from './components/ChatWorkspace'
 import { OperationsConsole } from './components/OperationsConsole'
 import { TracePanel } from './components/TracePanel'
 import { IntegrationHealthModal } from './components/IntegrationHealthModal'
+import { ComponentCatalog } from './components/ComponentCatalog'
 import { API_BASE } from './config'
 
 export interface ActionFeedback {
@@ -79,6 +80,7 @@ export default function App() {
   const [health, setHealth] = useState<IntegrationHealth | null>(null)
   const [isLoadingHealth, setIsLoadingHealth] = useState<boolean>(false)
   const [isHealthModalOpen, setIsHealthModalOpen] = useState<boolean>(false)
+  const [showCatalog, setShowCatalog] = useState<boolean>(false)
   const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
 
   // Synchronize chat state to localStorage to survive page refreshes
@@ -841,10 +843,13 @@ export default function App() {
           setIsHealthModalOpen(true)
           loadHealth()
         }}
+        onOpenCatalog={() => setShowCatalog(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-        {currentRole === 'MERCHANT' ? (
+        {showCatalog ? (
+          <ComponentCatalog onBack={() => setShowCatalog(false)} />
+        ) : currentRole === 'MERCHANT' ? (
           <>
             <MerchantDashboard
               profile={profile}

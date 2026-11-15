@@ -47,3 +47,24 @@ Do not overwrite previous handoffs.
 - Left to do: U1-A3 (small model safety template fallback if local fails), U1-A4 (benchmark table)
 - Gotchas: When Ollama daemon is offline, is_available returns False in <50ms and cleanly skips to the next cascade tier without latency penalty.
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+
+---
+
+## U6-A3 chunk 3: Overlays, feedback and catalog (Antigravity, 15 Nov 2026, 14:31 IST)
+- Status: done
+- Branch: upscale/U6-A3
+- Files changed: apps/web/src/components/Modal.tsx, apps/web/src/components/Toast.tsx, apps/web/src/components/Skeleton.tsx, apps/web/src/components/EmptyState.tsx, apps/web/src/components/ErrorState.tsx, apps/web/src/components/SourceBadge.tsx, apps/web/src/components/ComponentCatalog.tsx, apps/web/src/components/Header.tsx, apps/web/src/App.tsx
+- Tests run and result: npm run build in apps/web (PASS 0 errors in 2.12s), scripts/guard.py (PASS 100%)
+- Acceptance criteria:
+  - Modal with accessible dialog, backdrop click, keyboard Esc handler: met
+  - Toast with auto-dismiss and semantic status variants (success, warning, error, info): met
+  - Skeleton with text, circular, and rectangular calm pulse placeholders: met
+  - EmptyState with centered calm icon, description, and action button: met
+  - ErrorState with collapsible technical details, retry button, role=alert: met
+  - SourceBadge restyled with clean tokenized design tokens (no dark slate hex): met
+  - Interactive ComponentCatalog page showcasing all primitives and design tokens: met
+  - Zero hard-coded hex colors in components; 100% theme tokens: met
+  - Zero backend edits: met
+- Left to do: U6-A3 Chunk 2 (Layout & Navigation: Stepper, BottomNav, Sidebar, DataTable), then U6-A4 (Merchant mobile app) and U6-A5 (Operations console)
+- Gotchas: All feedback and overlay containers strictly reference status-*, surface-*, paytm-*, and ink-* Tailwind tokens without hex literals. ComponentCatalog is accessible via the "Catalog" button in the app header or standalone.
+- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)

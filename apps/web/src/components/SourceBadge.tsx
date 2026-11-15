@@ -12,20 +12,20 @@ export const SourceBadge: FC<SourceBadgeProps> = ({
   className = '',
   size = 'sm',
 }) => {
-  let badgeStyle = 'bg-slate-800 text-slate-300 border-slate-700'
+  let badgeStyle = 'bg-surface-subtle text-ink-secondary border-surface-border'
   let label = source
 
   if (source === 'PAYTM_STAGING') {
-    badgeStyle = 'bg-sky-950/80 text-sky-400 border-sky-800/80 shadow-sky-950/20'
+    badgeStyle = 'bg-paytm-cyan-light text-paytm-navy border-paytm-cyan/30'
     label = 'PAYTM STAGING'
   } else if (source === 'SYNTHETIC_DEMO') {
-    badgeStyle = 'bg-amber-950/80 text-amber-400 border-amber-800/80 shadow-amber-950/20'
+    badgeStyle = 'bg-status-approval-bg text-status-approval-text border-status-approval-border'
     label = 'SYNTHETIC DEMO'
   } else if (source === 'INTEGRATION_UNAVAILABLE' || source === 'UNAVAILABLE') {
-    badgeStyle = 'bg-rose-950/80 text-rose-400 border-rose-800/80 shadow-rose-950/20'
+    badgeStyle = 'bg-status-rejected-bg text-status-rejected-text border-status-rejected-border'
     label = 'INTEGRATION UNAVAILABLE'
   } else if (source === 'MOCK' || source === 'MOCK_SETTLEMENT_OPS') {
-    badgeStyle = 'bg-purple-950/80 text-purple-400 border-purple-800/80 shadow-purple-950/20'
+    badgeStyle = 'bg-surface-subtle text-ink-secondary border-surface-border'
     label = 'MOCK ADAPTER'
   }
 
