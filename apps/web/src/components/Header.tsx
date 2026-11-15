@@ -36,6 +36,9 @@ export const Header: FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-base text-white tracking-tight">OpsSaathi AI</span>
+              <span className="text-[10px] font-bold uppercase bg-paytm-cyan text-paytm-navy px-1.5 py-0.5 rounded shadow-xs tracking-wide">
+                Paytm Pi
+              </span>
               <span className="text-[10px] font-semibold uppercase bg-paytm-cyan/20 text-paytm-cyan border border-paytm-cyan/30 px-1.5 py-0.2 rounded">
                 Track 3
               </span>

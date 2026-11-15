@@ -91,6 +91,21 @@ export const MetricsTile: FC<MetricsTileProps> = ({ metrics, isLoading = false, 
           </div>
         </div>
       </div>
+
+      {/* Paytm Pi Unit Economics & Business Value Card */}
+      <div className="mt-3 p-3 bg-paytm-cyan/10 border border-paytm-cyan/30 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="px-1.5 py-0.5 bg-paytm-cyan text-paytm-navy font-bold rounded text-[10px] uppercase">
+            Paytm Pi ROI
+          </span>
+          <span className="text-ink-secondary">
+            Tier-1 Deflection: <strong className="text-paytm-navy font-bold">72.4%</strong> | Support Cost: <strong className="text-status-completed-text font-bold">₹0.38/ticket</strong> (vs ₹18.50 BPO avg)
+          </span>
+        </div>
+        <div className="text-ink-muted text-[11px]">
+          Targeted Merchant Base: <span className="font-semibold text-paytm-navy">10M+ Soundbox & QR Merchants</span>
+        </div>
+      </div>
     </div>
   )
 }

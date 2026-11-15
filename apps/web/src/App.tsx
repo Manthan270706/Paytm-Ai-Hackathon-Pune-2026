@@ -12,6 +12,8 @@ import {
   VerificationResult,
   OutcomeMetrics,
   IntegrationHealth,
+  WatchdogAlert,
+  ChargebackDefensePacket,
 } from './types/api'
 import { Header } from './components/Header'
 import { MerchantDashboard } from './components/MerchantDashboard'
@@ -20,6 +22,7 @@ import { OperationsConsole } from './components/OperationsConsole'
 import { TracePanel } from './components/TracePanel'
 import { IntegrationHealthModal } from './components/IntegrationHealthModal'
 import { ComponentCatalog } from './components/ComponentCatalog'
+import { ChargebackModal } from './components/ChargebackModal'
 import { API_BASE } from './config'
 
 export interface ActionFeedback {
@@ -82,6 +85,10 @@ export default function App() {
   const [isHealthModalOpen, setIsHealthModalOpen] = useState<boolean>(false)
   const [showCatalog, setShowCatalog] = useState<boolean>(false)
   const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null)
+  const [watchdogAlert, setWatchdogAlert] = useState<WatchdogAlert | null>(null)
+  const [chargebackPacket, setChargebackPacket] = useState<ChargebackDefensePacket | null>(null)
+  const [isChargebackModalOpen, setIsChargebackModalOpen] = useState<boolean>(false)
+  const [isLoadingChargeback, setIsLoadingChargeback] = useState<boolean>(false)
 
   // Synchronize chat state to localStorage to survive page refreshes
   useEffect(() => {
@@ -168,6 +175,60 @@ export default function App() {
     }
   }
 
+  const loadWatchdogAlerts = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/watchdog/alerts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        if (json.data?.alerts && json.data.alerts.length > 0) {
+          setWatchdogAlert(json.data.alerts[0])
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load watchdog alerts', err)
+    }
+  }
+
+  const handleRunWatchdogScan = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/watchdog/scan`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setWatchdogAlert(json.data?.alert || null)
+        setActionFeedback({
+          type: 'info',
+          title: 'Watchdog Cycle Executed',
+          message: 'Proactive scan completed. Overdue settlement identified and tracked in real-time.',
+        })
+      }
+    } catch (err) {
+      console.error('Watchdog scan failed', err)
+    }
+  }
+
+  const handleOpenChargeback = async (caseId: string) => {
+    setIsChargebackModalOpen(true)
+    setIsLoadingChargeback(true)
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/chargeback-packet`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setChargebackPacket(json.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch chargeback defense packet', err)
+    } finally {
+      setIsLoadingChargeback(false)
+    }
+  }
+
   // Fetch initial dashboard and case data
   const loadDashboardData = async () => {
     try {
@@ -217,6 +278,7 @@ export default function App() {
       // 5. Outcome Metrics & Integration Health
       loadMetrics()
       loadHealth()
+      loadWatchdogAlerts()
 
       // 6. Active Conversation Messages (fallback if local storage was empty)
       try {
@@ -859,13 +921,17 @@ export default function App() {
               discrepancy={discrepancy}
               loading={loading}
               error={error}
+              currentLanguage={currentLanguage}
+              watchdogAlert={watchdogAlert}
+              onRunWatchdogScan={handleRunWatchdogScan}
+              onOpenChargeback={handleOpenChargeback}
               onOpenChat={(prompt) => {
                 if (prompt) handleSendMessage(prompt)
               }}
             />
 
-            <div className="pt-4 border-t border-slate-800">
-              <h3 className="text-lg font-bold text-white mb-4">Autonomous Merchant Support Chat</h3>
+            <div className="pt-4 border-t border-surface-divider">
+              <h3 className="text-lg font-bold text-paytm-navy mb-4">Autonomous Merchant Support Chat</h3>
               <ChatWorkspace
                 messages={messages}
                 evidenceSummary={evidenceSummary}
@@ -908,6 +974,8 @@ export default function App() {
             actionFeedback={actionFeedback}
             onClearFeedback={() => setActionFeedback(null)}
             onCreateCase={handleCreateCase}
+            onRunWatchdogScan={handleRunWatchdogScan}
+            onOpenChargeback={handleOpenChargeback}
           />
         )}
       </main>
@@ -924,6 +992,13 @@ export default function App() {
         onClose={() => setIsHealthModalOpen(false)}
         health={health}
         isLoading={isLoadingHealth}
+      />
+
+      <ChargebackModal
+        isOpen={isChargebackModalOpen}
+        packet={chargebackPacket}
+        isLoading={isLoadingChargeback}
+        onClose={() => setIsChargebackModalOpen(false)}
       />
 
       <footer className="py-4 px-4 text-center text-xs text-ink-muted border-t border-surface-divider bg-surface-card">

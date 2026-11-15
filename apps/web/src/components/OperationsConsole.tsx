@@ -25,6 +25,8 @@ import {
   AlertTriangle,
   X,
   FileCheck,
+  Zap,
+  ShieldCheck,
 } from 'lucide-react'
 
 export interface ActionFeedbackNotice {
@@ -63,6 +65,8 @@ interface OperationsConsoleProps {
     queue: string
     summary: string
   }) => Promise<void>
+  onRunWatchdogScan?: () => Promise<void>
+  onOpenChargeback?: (caseId: string) => void
 }
 
 const QUEUES = [
@@ -102,6 +106,8 @@ export const OperationsConsole: FC<OperationsConsoleProps> = ({
   actionFeedback = null,
   onClearFeedback,
   onCreateCase,
+  onRunWatchdogScan,
+  onOpenChargeback,
 }) => {
   const [selectedQueue, setSelectedQueue] = useState('ALL')
   const [selectedStatus, setSelectedStatus] = useState('ALL')
@@ -300,17 +306,31 @@ export const OperationsConsole: FC<OperationsConsoleProps> = ({
             />
           </div>
 
-          {/* New Case Button */}
-          {onCreateCase && (
-            <Button
-              variant="primary"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="gap-2 text-xs min-h-12 px-4 whitespace-nowrap"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Create Case</span>
-            </Button>
-          )}
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {onRunWatchdogScan && (
+              <Button
+                variant="secondary"
+                onClick={onRunWatchdogScan}
+                className="gap-1.5 text-xs min-h-12 px-3.5 border-paytm-cyan/50 text-paytm-navy hover:bg-paytm-cyan/10 whitespace-nowrap"
+              >
+                <Zap className="w-4 h-4 text-paytm-navy" />
+                <span>Run Watchdog Scan</span>
+              </Button>
+            )}
+
+            {/* New Case Button */}
+            {onCreateCase && (
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="gap-2 text-xs min-h-12 px-4 whitespace-nowrap"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Create Case</span>
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Queue and Status Filter Chips */}
@@ -547,8 +567,19 @@ export const OperationsConsole: FC<OperationsConsoleProps> = ({
                       {isAssigning ? 'Updating...' : 'Assign'}
                     </Button>
                   </div>
-
-                  <SourceBadge source="MOCK_SETTLEMENT_OPS" size="sm" />
+                  <div className="flex items-center gap-2">
+                    {onOpenChargeback && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => onOpenChargeback(selectedCase.id)}
+                        className="text-xs min-h-10 px-3 border-paytm-cyan text-paytm-navy font-semibold hover:bg-paytm-cyan/10 flex items-center gap-1.5"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-paytm-navy" />
+                        <span>Chargeback Defense Docket</span>
+                      </Button>
+                    )}
+                    <SourceBadge source="MOCK_SETTLEMENT_OPS" size="sm" />
+                  </div>
                 </div>
               </div>
 

@@ -19,6 +19,7 @@ from app.api.v1.metrics import router as metrics_router
 from app.api.v1.settlements import router as settlements_router
 from app.api.v1.transactions import router as transactions_router
 from app.api.v1.voice import router as voice_router
+from app.api.v1.watchdog import router as watchdog_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.core.config import settings
 from app.core.exceptions import (
@@ -79,6 +80,7 @@ app.include_router(voice_router, prefix="/api/v1", tags=["Voice"])
 app.include_router(cases_router, prefix="/api/v1", tags=["Cases"])
 app.include_router(demo_router, prefix="/api/v1", tags=["Demo"])
 app.include_router(metrics_router, prefix="/api/v1", tags=["Metrics"])
+app.include_router(watchdog_router, prefix="/api/v1", tags=["Watchdog"])
 app.include_router(webhooks_router, prefix="/api/v1", tags=["Webhooks"])
 
 

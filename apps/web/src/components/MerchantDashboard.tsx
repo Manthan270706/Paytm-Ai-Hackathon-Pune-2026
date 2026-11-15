@@ -20,7 +20,10 @@ import {
   Receipt,
   Phone,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react'
+import { WatchdogAlert } from '../types/api'
+import { WatchdogBanner } from './WatchdogBanner'
 
 interface MerchantDashboardProps {
   profile: MerchantProfile | null
@@ -31,6 +34,10 @@ interface MerchantDashboardProps {
   loading: boolean
   error: string | null
   token?: string
+  currentLanguage?: string
+  watchdogAlert?: WatchdogAlert | null
+  onRunWatchdogScan?: () => Promise<void>
+  onOpenChargeback?: (caseId: string) => void
   onOpenChat: (presetPrompt?: string) => void
 }
 
@@ -43,6 +50,10 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
   loading,
   error,
   token = 'demo-token-merchant-1',
+  currentLanguage = 'en',
+  watchdogAlert = null,
+  onRunWatchdogScan,
+  onOpenChargeback,
   onOpenChat,
 }) => {
   const [activeTab, setActiveTab] = useState<MerchantTab>('home')
@@ -251,6 +262,16 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
       {/* TAB 1: OVERVIEW (HOME) */}
       {activeTab === 'home' && (
         <div className="space-y-6">
+          {/* Proactive Settlement Watchdog Banner */}
+          {watchdogAlert && (
+            <WatchdogBanner
+              alert={watchdogAlert}
+              currentLanguage={currentLanguage}
+              onScanNow={onRunWatchdogScan}
+              onViewCase={(cId) => setSelectedCaseId(cId)}
+            />
+          )}
+
           {/* Primary 3-Number Settlement Summary Card */}
           <div className="bg-surface-card rounded-card border border-surface-border p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-surface-divider">
@@ -350,7 +371,19 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
                     #{activeCase.case_number}
                   </span>
                 </div>
-                <StatusChip status={(activeCase.status as CaseStatus) || 'IN_PROGRESS'} />
+                <div className="flex items-center gap-2">
+                  {onOpenChargeback && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => onOpenChargeback(activeCase.id)}
+                      className="text-xs min-h-10 px-2.5 border-paytm-cyan text-paytm-navy font-semibold hover:bg-paytm-cyan/10 flex items-center gap-1"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-paytm-navy" />
+                      <span>Dispute Defense</span>
+                    </Button>
+                  )}
+                  <StatusChip status={(activeCase.status as CaseStatus) || 'IN_PROGRESS'} />
+                </div>
               </div>
 
               <Stepper

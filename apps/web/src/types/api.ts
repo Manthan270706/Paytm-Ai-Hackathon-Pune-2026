@@ -191,4 +191,51 @@ export interface IntegrationHealth {
   }
 }
 
+export interface WatchdogAlert {
+  alert_id: string
+  batch_ref: string
+  amount: string
+  currency: string
+  utr_number: string
+  delay_reason: string
+  clearing_bank: string
+  expected_credit_window: string
+  case_number: string
+  case_id: string
+  severity: 'INFO' | 'WARNING' | 'CRITICAL'
+  messages: { [lang: string]: string }
+  soundbox_announcement: string
+  detected_at: string
+  status: string
+}
+
+export interface ChargebackDefensePacket {
+  case_number: string
+  order_id: string
+  disputed_amount: string
+  merchant_name: string
+  merchant_mid: string
+  kyc_status: string
+  dispute_category: string
+  customer_claim: string
+  soundbox_proof: {
+    device_model: string
+    imei: string
+    audio_broadcast_time: string
+    broadcast_status: string
+    voice_language: string
+    tower_cell_id: string
+  }
+  npci_trace: {
+    npci_rrn: string
+    payer_vpa: string
+    auth_code: string
+    gateway_status: string
+  }
+  arbitration_docket_markdown: string
+  generated_at: string
+  submission_deadline: string
+  status: string
+}
+
 
