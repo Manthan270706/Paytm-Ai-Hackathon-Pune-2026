@@ -68,3 +68,24 @@ Do not overwrite previous handoffs.
 - Left to do: U6-A3 Chunk 2 (Layout & Navigation: Stepper, BottomNav, Sidebar, DataTable), then U6-A4 (Merchant mobile app) and U6-A5 (Operations console)
 - Gotchas: All feedback and overlay containers strictly reference status-*, surface-*, paytm-*, and ink-* Tailwind tokens without hex literals. ComponentCatalog is accessible via the "Catalog" button in the app header or standalone.
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+
+---
+
+## U6-A4: Merchant mobile app redesign (Antigravity, 15 Nov 2026, 14:42 IST)
+- Status: done
+- Branch: upscale/u6-a4
+- Files changed: apps/web/src/components/MerchantDashboard.tsx, apps/web/src/components/ChatWorkspace.tsx, apps/web/src/components/EvidencePanel.tsx, apps/web/src/components/BottomNav.tsx, apps/web/src/components/Stepper.tsx, apps/web/src/components/Sidebar.tsx, apps/web/src/components/DataTable.tsx, apps/web/src/components/Header.tsx, apps/web/src/App.tsx
+- Tests run and result: npm run build in apps/web (PASS 0 errors in 2.23s), scripts/guard.py (PASS 100%)
+- Acceptance criteria:
+  - Bottom navigation: Home, Payments, Settlements, Help on 390px mobile view with 48px min-height touch targets: met
+  - Home: Merchant name, 3-number settlement summary card (Expected ₹15,000, Received ₹9,000, Pending ₹6,000), open case banner with Stepper, and primary "Ask OpsSaathi" action: met
+  - Payments and Settlements: list rows with Indian currency formatting (₹), date, StatusChip, and SourceBadge: met
+  - Help: quick category chips (Settlement delay, Refund, Fees, Device, Other) that trigger autonomous diagnosis: met
+  - Chat: calm short bubbles (Navy for user, white card for assistant), evidence card with 3 numbers, and collapsed "Technical Details" expander for calculation trace: met
+  - Case tracking: Stepper with 5 stages (Reported, Checking, With Support, Verified, Resolved) and next update time: met
+  - Zero hard-coded hex colors; 100% theme tokens: met
+  - Hackathon footer disclaimer rendered: met
+  - Zero backend edits: met
+- Left to do: U6-A5 (Operations console redesign), U6-A6 (Copy and agent tone), U6-A7 (Accessibility fixes), U6-A8 (Visual QA and regression)
+- Gotchas: All mobile screens are 390px thumb-friendly without horizontal scroll. Technical traces and hashes are collapsed behind an expander to eliminate AI slop.
+- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)

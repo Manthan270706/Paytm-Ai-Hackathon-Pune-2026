@@ -26,107 +26,112 @@ export const Header: FC<HeaderProps> = ({
   onOpenCatalog,
 }) => {
   return (
-    <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+    <header className="sticky top-0 z-50 bg-paytm-navy text-white border-b border-paytm-navy-dark shadow-sm font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo and Brand */}
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-400 flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-sky-500/20">
+          <div className="h-9 w-9 rounded-xl bg-paytm-cyan text-paytm-navy flex items-center justify-center font-black text-lg shadow-xs">
             ₹
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-lg text-white tracking-tight">OpsSaathi AI</span>
-              <span className="text-[10px] font-semibold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">
+              <span className="font-bold text-base text-white tracking-tight">OpsSaathi AI</span>
+              <span className="text-[10px] font-semibold uppercase bg-paytm-cyan/20 text-paytm-cyan border border-paytm-cyan/30 px-1.5 py-0.2 rounded">
                 Track 3
               </span>
               {isReplayMode && (
                 <span
-                  className="text-[10px] font-semibold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
+                  className="text-[10px] font-medium bg-status-approval-bg text-status-approval-text border border-status-approval-border px-1.5 py-0.2 rounded-full flex items-center gap-1 shadow-xs"
                   title="Serving deterministic cached golden scenario (PRD §12.3 Replay Mode)"
                 >
                   <RotateCcw className="h-2.5 w-2.5 animate-spin" />
-                  Replay Mode
+                  Replay
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 font-medium">Autonomous Merchant Operations Teammate</p>
+            <p className="text-[11px] text-white/70">Settlement Resolution Teammate</p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Language Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
-            <Languages className="h-3.5 w-3.5 text-sky-400" />
+          <div className="flex items-center gap-1.5 bg-paytm-navy-light border border-white/20 rounded-lg px-2.5 py-1.5 text-xs text-white">
+            <Languages className="h-3.5 w-3.5 text-paytm-cyan" />
             <select
               value={currentLanguage}
               onChange={(e) => onLanguageChange(e.target.value)}
-              className="bg-transparent text-slate-200 outline-none cursor-pointer font-medium pr-1"
+              className="bg-transparent text-white outline-none cursor-pointer font-medium pr-1"
             >
-              <option value="en" className="bg-slate-800 text-slate-200">English</option>
-              <option value="hi" className="bg-slate-800 text-slate-200">हिन्दी (Hindi)</option>
-              <option value="mr" className="bg-slate-800 text-slate-200">मराठी (Marathi)</option>
+              <option value="en" className="bg-paytm-navy text-white">English</option>
+              <option value="hi" className="bg-paytm-navy text-white">हिन्दी (Hindi)</option>
+              <option value="mr" className="bg-paytm-navy text-white">मराठी (Marathi)</option>
             </select>
           </div>
 
           {/* Reset Demo Button */}
           <button
+            type="button"
             onClick={onResetDemo}
             disabled={isResetting}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700/80 text-amber-400 border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-medium transition shadow-sm disabled:opacity-50"
-            title="Reset to frozen scenario (₹15,000 expected, ₹9,000 observed)"
+            className="flex items-center gap-1.5 bg-paytm-navy-light hover:bg-paytm-navy-dark text-white border border-white/20 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-xs disabled:opacity-50"
+            title="Reset to frozen baseline scenario (₹15,000 expected, ₹9,000 observed)"
           >
-            <RotateCcw className={`h-3.5 w-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-            <span>{isResetting ? 'Resetting...' : 'Reset Demo'}</span>
+            <RotateCcw className={`h-3.5 w-3.5 text-paytm-cyan ${isResetting ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isResetting ? 'Resetting...' : 'Reset'}</span>
           </button>
 
           {/* Integration Health Button */}
           {onOpenHealth && (
             <button
+              type="button"
               onClick={onOpenHealth}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700/80 text-cyan-400 border border-cyan-500/30 rounded-lg px-3 py-1.5 text-xs font-medium transition shadow-sm"
+              className="flex items-center gap-1.5 bg-paytm-navy-light hover:bg-paytm-navy-dark text-paytm-cyan border border-paytm-cyan/30 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-xs"
               title="View active provider adapters and integration health"
             >
-              <Activity className="h-3.5 w-3.5 text-cyan-400" />
-              <span>Health</span>
+              <Activity className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Health</span>
             </button>
           )}
 
           {/* Design Catalog Button */}
           {onOpenCatalog && (
             <button
+              type="button"
               onClick={onOpenCatalog}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700/80 text-paytm-cyan border border-paytm-cyan/30 rounded-lg px-3 py-1.5 text-xs font-medium transition shadow-sm"
+              className="flex items-center gap-1.5 bg-paytm-navy-light hover:bg-paytm-navy-dark text-white border border-white/20 rounded-lg px-2.5 py-1.5 text-xs font-medium transition shadow-xs"
               title="View design tokens and primitive UI components"
             >
               <LayoutGrid className="h-3.5 w-3.5 text-paytm-cyan" />
-              <span>Catalog</span>
+              <span className="hidden sm:inline">Catalog</span>
             </button>
           )}
 
-          {/* Role Toggle / Demo Login */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
+          {/* Role Switcher */}
+          <div className="flex items-center bg-paytm-navy-dark p-1 rounded-xl border border-white/10 text-xs font-medium">
             <button
+              type="button"
               onClick={() => onRoleChange('MERCHANT')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
                 currentRole === 'MERCHANT'
-                  ? 'bg-sky-500 text-slate-950 font-semibold shadow-md shadow-sky-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-paytm-cyan text-paytm-navy font-bold shadow-xs'
+                  : 'text-white/70 hover:text-white'
               }`}
             >
               <User className="h-3.5 w-3.5" />
-              <span>Merchant View</span>
+              <span className="hidden md:inline">Merchant</span>
             </button>
             <button
+              type="button"
               onClick={() => onRoleChange('SUPPORT_AGENT')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
                 currentRole === 'SUPPORT_AGENT'
-                  ? 'bg-purple-500 text-white font-semibold shadow-md shadow-purple-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-paytm-navy font-bold shadow-xs'
+                  : 'text-white/70 hover:text-white'
               }`}
             >
               <Shield className="h-3.5 w-3.5" />
-              <span>Ops Console</span>
+              <span className="hidden md:inline">Console</span>
             </button>
           </div>
         </div>

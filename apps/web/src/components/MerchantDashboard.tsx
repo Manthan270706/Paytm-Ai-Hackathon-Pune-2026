@@ -6,15 +6,20 @@ import {
   SupportCaseItem,
 } from '../types/api'
 import { SourceBadge } from './SourceBadge'
+import { StatusChip, CaseStatus } from './StatusChip'
+import { Stepper, StepItem } from './Stepper'
+import { BottomNav, MerchantTab } from './BottomNav'
+import { ListRow } from './ListRow'
+import { Card } from './Card'
+import { Button } from './Button'
+import { EmptyState } from './EmptyState'
 import { MerchantCaseModal } from './MerchantCaseModal'
 import {
-  AlertCircle,
-  CheckCircle2,
-  ArrowUpRight,
-  CreditCard,
-  FileText,
+  MessageSquare,
+  AlertTriangle,
+  Receipt,
+  Phone,
   Sparkles,
-  PlusCircle,
 } from 'lucide-react'
 
 interface MerchantDashboardProps {
@@ -40,280 +45,514 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
   token = 'demo-token-merchant-1',
   onOpenChat,
 }) => {
+  const [activeTab, setActiveTab] = useState<MerchantTab>('home')
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
+
   if (loading) {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-28 bg-slate-800/60 rounded-2xl border border-slate-700/60" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="h-32 bg-slate-800/60 rounded-2xl border border-slate-700/60" />
-          <div className="h-32 bg-slate-800/60 rounded-2xl border border-slate-700/60" />
-          <div className="h-32 bg-slate-800/60 rounded-2xl border border-slate-700/60" />
-        </div>
+      <div className="space-y-4 animate-pulse font-sans">
+        <div className="h-24 bg-surface-subtle rounded-card border border-surface-border" />
+        <div className="h-44 bg-surface-subtle rounded-card border border-surface-border" />
+        <div className="h-32 bg-surface-subtle rounded-card border border-surface-border" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="p-6 bg-rose-950/40 border border-rose-800/60 rounded-2xl text-rose-300 flex items-center gap-3">
-        <AlertCircle className="h-6 w-6 text-rose-400 shrink-0" />
+      <div
+        role="alert"
+        className="p-4 bg-status-rejected-bg border border-status-rejected-border rounded-xl text-status-rejected-text flex items-center gap-3 font-sans"
+      >
+        <AlertTriangle className="h-5 w-5 shrink-0" />
         <div>
-          <h3 className="font-semibold text-sm">Failed to load dashboard data</h3>
-          <p className="text-xs text-rose-300/80 mt-0.5">{error}</p>
+          <h3 className="font-semibold text-sm">Unable to load merchant overview</h3>
+          <p className="text-xs text-ink-secondary mt-0.5">{error}</p>
         </div>
       </div>
     )
   }
 
+  const discrepancyVal = parseFloat(discrepancy || '0')
+  const isReconciled = discrepancyVal === 0
+
+  const expectedTotal =
+    transactions.length > 0
+      ? transactions
+          .filter((t) => t.status === 'SUCCESS')
+          .reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
+      : 15000.0
+
+  const observedTotal =
+    settlements.length > 0
+      ? settlements.reduce((sum, b) => sum + parseFloat(b.net || '0'), 0)
+      : 9000.0
+
+  // Stepper state derived from most recent active case
+  const activeCase = cases.length > 0 ? cases[0] : null
+  const getStepperSteps = (caseItem: SupportCaseItem | null): StepItem[] => {
+    const status = caseItem?.status || 'IN_PROGRESS'
+    return [
+      {
+        id: 'reported',
+        label: 'Reported',
+        description: 'Issue logged',
+        state: 'completed',
+        timestamp: '12 Nov, 10:15 AM',
+      },
+      {
+        id: 'checking',
+        label: 'Checking',
+        description: 'Ledger verified',
+        state: status === 'NEW' ? 'current' : 'completed',
+        timestamp: '12 Nov, 10:16 AM',
+      },
+      {
+        id: 'support',
+        label: 'With Support',
+        description: 'Supervisor approval',
+        state:
+          status === 'AWAITING_APPROVAL'
+            ? 'current'
+            : status === 'APPROVED' || status === 'VERIFYING' || status === 'RESOLVED'
+            ? 'completed'
+            : 'upcoming',
+        timestamp: status === 'AWAITING_APPROVAL' ? 'Pending Action' : undefined,
+      },
+      {
+        id: 'verified',
+        label: 'Verified',
+        description: 'Bank credit match',
+        state:
+          status === 'VERIFYING'
+            ? 'current'
+            : status === 'RESOLVED'
+            ? 'completed'
+            : 'upcoming',
+      },
+      {
+        id: 'resolved',
+        label: 'Resolved',
+        description: 'Ledger closed',
+        state: status === 'RESOLVED' ? 'completed' : 'upcoming',
+      },
+    ]
+  }
+
+  const categoryChips = [
+    { label: 'Settlement delay', prompt: 'Why is ₹6,000.00 missing from my settlement on 12 Nov?' },
+    { label: 'Refund issue', prompt: 'I want to check the status of customer refund for order #1082' },
+    { label: 'Charges & Fees', prompt: 'What are the charges applied to my daily settlement batch?' },
+    { label: 'Soundbox device', prompt: 'My Paytm Soundbox did not announce payment received' },
+    { label: 'Other question', prompt: 'I need assistance reviewing an operational issue with my account' },
+  ]
+
+  const triggerChat = (prompt: string) => {
+    setActiveTab('help')
+    onOpenChat(prompt)
+    setTimeout(() => {
+      const chatElem = document.querySelector('input[placeholder*="Ask OpsSaathi"]') as HTMLInputElement
+      if (chatElem) {
+        chatElem.scrollIntoView({ behavior: 'smooth' })
+        chatElem.focus()
+      }
+    }, 150)
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Merchant Profile Header */}
-      <div className="p-6 bg-slate-800/80 rounded-2xl border border-slate-700/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-white tracking-tight">
-              {profile?.display_name || 'Paytm Smart Merchant Store'}
-            </h2>
-            <SourceBadge source={profile?.source_type || 'SYNTHETIC_DEMO'} />
+    <div className="w-full max-w-md mx-auto sm:max-w-3xl pb-20 font-sans space-y-6 text-ink-primary">
+      {/* Merchant Header Card */}
+      <div className="bg-surface-card rounded-card border border-surface-border p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-paytm-navy text-white flex items-center justify-center font-bold text-lg shadow-xs">
+            {profile?.display_name ? profile.display_name.charAt(0) : 'S'}
           </div>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            Merchant ID: {profile?.id || '11111111-1111-1111-1111-111111111111'} • Phone: {profile?.masked_phone || '+91 98****1234'}
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-paytm-navy tracking-tight">
+                {profile?.display_name || 'Sharma General Store'}
+              </h2>
+              <SourceBadge source={profile?.source_type || 'SYNTHETIC_DEMO'} size="sm" />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-ink-secondary mt-0.5">
+              <span className="flex items-center gap-1 font-mono">
+                <Phone className="w-3 h-3 text-ink-muted" />
+                {profile?.masked_phone || '+91 98****1234'}
+              </span>
+              <span>•</span>
+              <span className="font-mono text-[11px] text-ink-muted">
+                MID: {profile?.id ? profile.id.slice(0, 8) : '11111111'}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <button
-          onClick={() => {
-            const chatElem = document.querySelector('input[placeholder*="Ask OpsSaathi"]') as HTMLInputElement
-            if (chatElem) {
-              chatElem.scrollIntoView({ behavior: 'smooth' })
-              chatElem.focus()
-            } else {
-              onOpenChat('I need assistance reviewing an operational issue with my merchant account')
-            }
-          }}
-          className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-slate-950 px-4 py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-sky-500/20 transition transform hover:-translate-y-0.5"
+        <Button
+          variant="secondary"
+          onClick={() => triggerChat('Check my daily settlement balance')}
+          className="gap-2 text-xs min-h-10 px-3 self-start sm:self-center"
         >
-          <Sparkles className="h-4 w-4" />
-          <span>Ask OpsSaathi to Assist</span>
+          <Sparkles className="w-3.5 h-3.5 text-paytm-navy" />
+          <span>Quick Help</span>
+        </Button>
+      </div>
+
+      {/* Navigation Pills (Mobile top view & Desktop switcher) */}
+      <div className="flex items-center gap-1.5 p-1 bg-surface-subtle rounded-xl border border-surface-border overflow-x-auto text-xs font-medium">
+        <button
+          type="button"
+          onClick={() => setActiveTab('home')}
+          className={`flex-1 min-h-10 px-3 py-1.5 rounded-lg transition text-center ${
+            activeTab === 'home'
+              ? 'bg-surface-card text-paytm-navy font-semibold shadow-xs'
+              : 'text-ink-secondary hover:text-ink-primary'
+          }`}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('payments')}
+          className={`flex-1 min-h-10 px-3 py-1.5 rounded-lg transition text-center ${
+            activeTab === 'payments'
+              ? 'bg-surface-card text-paytm-navy font-semibold shadow-xs'
+              : 'text-ink-secondary hover:text-ink-primary'
+          }`}
+        >
+          Payments ({transactions.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('settlements')}
+          className={`flex-1 min-h-10 px-3 py-1.5 rounded-lg transition text-center ${
+            activeTab === 'settlements'
+              ? 'bg-surface-card text-paytm-navy font-semibold shadow-xs'
+              : 'text-ink-secondary hover:text-ink-primary'
+          }`}
+        >
+          Settlements
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('help')}
+          className={`flex-1 min-h-10 px-3 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1 ${
+            activeTab === 'help'
+              ? 'bg-surface-card text-paytm-navy font-semibold shadow-xs'
+              : 'text-ink-secondary hover:text-ink-primary'
+          }`}
+        >
+          <span>Ask OpsSaathi</span>
+          {cases.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-paytm-cyan" />
+          )}
         </button>
       </div>
 
-      {/* Financial Overview Cards */}
-      {(() => {
-        const discrepancyVal = parseFloat(discrepancy || '0')
-        const isReconciled = discrepancyVal === 0
-
-        const expectedTotal =
-          transactions.length > 0
-            ? transactions
-                .filter((t) => t.status === 'SUCCESS')
-                .reduce((sum, t) => sum + parseFloat(t.amount || '0'), 0)
-            : 0
-
-        const observedTotal =
-          settlements.length > 0
-            ? settlements.reduce((sum, b) => sum + parseFloat(b.net || '0'), 0)
-            : 0
-
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="p-5 bg-slate-800/60 rounded-2xl border border-slate-700/60 space-y-1">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-                <span>Expected Net Settlement</span>
-                <SourceBadge source="SYNTHETIC_DEMO" size="sm" />
+      {/* TAB 1: OVERVIEW (HOME) */}
+      {activeTab === 'home' && (
+        <div className="space-y-6">
+          {/* Primary 3-Number Settlement Summary Card */}
+          <div className="bg-surface-card rounded-card border border-surface-border p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-surface-divider">
+              <div>
+                <h3 className="text-sm font-semibold text-paytm-navy">
+                  Settlement Summary (12 Nov 2026)
+                </h3>
+                <p className="text-xs text-ink-secondary mt-0.5">
+                  Daily settlement balance calculation
+                </p>
               </div>
-              <div className="text-2xl font-black text-white tracking-tight">
-                ₹{expectedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <p className="text-[11px] text-slate-400">Total verified captures eligible for payout</p>
+              <SourceBadge source="SYNTHETIC_DEMO" size="sm" />
             </div>
 
-            <div className="p-5 bg-slate-800/60 rounded-2xl border border-slate-700/60 space-y-1">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-                <span>Observed in Bank Batch</span>
-                <SourceBadge source="SYNTHETIC_DEMO" size="sm" />
+            {/* 3 Prominent Numbers */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+              {/* Number 1: Expected */}
+              <div className="p-3 bg-surface-subtle rounded-xl border border-surface-border">
+                <span className="text-[11px] font-medium text-ink-secondary block">
+                  Expected
+                </span>
+                <span className="text-base sm:text-xl font-bold text-ink-primary tracking-tight mt-1 block">
+                  ₹{expectedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-ink-muted hidden sm:block mt-0.5">
+                  Verified captures
+                </span>
               </div>
-              <div className="text-2xl font-black text-slate-300 tracking-tight">
-                ₹{observedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+              {/* Number 2: Received in Bank */}
+              <div className="p-3 bg-surface-subtle rounded-xl border border-surface-border">
+                <span className="text-[11px] font-medium text-ink-secondary block">
+                  Received
+                </span>
+                <span className="text-base sm:text-xl font-bold text-ink-primary tracking-tight mt-1 block">
+                  ₹{observedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-ink-muted hidden sm:block mt-0.5">
+                  Credited to bank
+                </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                {isReconciled ? (
-                  <span className="text-emerald-400 font-medium">
-                    Fully credited via {settlements.length > 0 ? settlements[0].batch_ref : 'Bank Batch'}
+
+              {/* Number 3: Difference / Discrepancy */}
+              <div
+                className={`p-3 rounded-xl border ${
+                  isReconciled
+                    ? 'bg-status-completed-bg border-status-completed-border'
+                    : 'bg-status-approval-bg border-status-approval-border'
+                }`}
+              >
+                <span
+                  className={`text-[11px] font-semibold block ${
+                    isReconciled ? 'text-status-completed-text' : 'text-status-approval-text'
+                  }`}
+                >
+                  {isReconciled ? 'Status' : 'Pending'}
+                </span>
+                <span
+                  className={`text-base sm:text-xl font-black tracking-tight mt-1 block ${
+                    isReconciled ? 'text-status-completed-text' : 'text-status-approval-text'
+                  }`}
+                >
+                  {isReconciled
+                    ? '₹0.00'
+                    : `₹${discrepancyVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                </span>
+                <span
+                  className={`text-[10px] hidden sm:block mt-0.5 ${
+                    isReconciled ? 'text-status-completed-text' : 'text-status-approval-text'
+                  }`}
+                >
+                  {isReconciled ? 'Fully balanced' : 'Re-sync pending'}
+                </span>
+              </div>
+            </div>
+
+            {/* Big Primary Action: Ask OpsSaathi */}
+            <Button
+              variant="primary"
+              onClick={() => triggerChat('Why is ₹6,000.00 missing from my settlement on 12 Nov?')}
+              className="w-full min-h-12 text-sm font-semibold shadow-xs gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Ask OpsSaathi: Check My Settlement</span>
+            </Button>
+          </div>
+
+          {/* Open Dispute Tracking Banner with Stepper */}
+          {activeCase && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-paytm-navy">
+                    Active Support Ticket
+                  </h3>
+                  <span className="font-mono text-xs text-ink-secondary">
+                    #{activeCase.case_number}
                   </span>
-                ) : (
-                  `Credited via ${settlements.length > 0 ? settlements[0].batch_ref : 'Bank Batch'}`
-                )}
+                </div>
+                <StatusChip status={(activeCase.status as CaseStatus) || 'IN_PROGRESS'} />
+              </div>
+
+              <Stepper
+                steps={getStepperSteps(activeCase)}
+                nextUpdateText="Next update by 4:00 PM IST"
+              />
+            </div>
+          )}
+
+          {/* Recent Payments Peek */}
+          <div className="bg-surface-card rounded-card border border-surface-border p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-paytm-navy" />
+                <h4 className="text-sm font-semibold text-ink-primary">
+                  Recent Customer Payments
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('payments')}
+                className="text-xs font-semibold text-paytm-navy hover:underline"
+              >
+                View all ({transactions.length})
+              </button>
+            </div>
+
+            <div className="space-y-1 divide-y divide-surface-divider">
+              {transactions.slice(0, 3).map((txn) => (
+                <ListRow
+                  key={txn.id}
+                  title={txn.provider_txn_id}
+                  subtitle={txn.order_id}
+                  amount={`₹${parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                  onActivate={() => triggerChat(`Tell me about payment ${txn.provider_txn_id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: PAYMENTS */}
+      {activeTab === 'payments' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
+            <div>
+              <h3 className="text-sm font-semibold text-paytm-navy">
+                Payment Transactions
+              </h3>
+              <p className="text-xs text-ink-secondary">
+                Customer UPI, Card & Wallet captures
               </p>
             </div>
-
-            {isReconciled ? (
-              <div className="p-5 bg-emerald-950/30 rounded-2xl border border-emerald-500/40 space-y-1 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-emerald-300 font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                    Reconciliation Status
-                  </span>
-                  <span className="text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded">
-                    BALANCED
-                  </span>
-                </div>
-                <div className="text-2xl font-black text-emerald-400 tracking-tight">₹0.00</div>
-                <p className="text-[11px] text-emerald-300/80">All captured payments matched and settled to bank</p>
-              </div>
-            ) : (
-              <div className="p-5 bg-amber-950/30 rounded-2xl border border-amber-600/40 space-y-1 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-amber-300 font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
-                    Missing Discrepancy
-                  </span>
-                  <span className="text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                    OVERDUE
-                  </span>
-                </div>
-                <div className="text-2xl font-black text-amber-400 tracking-tight">
-                  ₹{discrepancyVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <p className="text-[11px] text-amber-300/80">Pending settlement re-sync approval</p>
-              </div>
-            )}
-          </div>
-        )
-      })()}
-
-      {/* Grid: Transactions and Open Cases */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Transactions Table */}
-        <div className="p-6 bg-slate-800/60 rounded-2xl border border-slate-700/60 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-sky-400" />
-              <h3 className="font-bold text-sm text-white">Recent Transactions</h3>
-            </div>
-            <span className="text-xs text-slate-400">{transactions.length} records</span>
+            <span className="text-xs font-semibold text-ink-secondary">
+              Total: ₹{expectedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-400 border-b border-slate-700/60 uppercase font-mono text-[10px]">
-                <tr>
-                  <th className="pb-2">Txn / Order</th>
-                  <th className="pb-2">Amount</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2 text-right">Source</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/40">
-                {transactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-6 text-center text-slate-500">
-                      No transactions found
-                    </td>
-                  </tr>
-                ) : (
-                  transactions.slice(0, 5).map((txn) => (
-                    <tr key={txn.id} className="hover:bg-slate-700/20">
-                      <td className="py-2.5 font-mono text-slate-300">
-                        <div>{txn.provider_txn_id}</div>
-                        <div className="text-[10px] text-slate-500">{txn.order_id}</div>
-                      </td>
-                      <td className="py-2.5 font-bold text-white">₹{txn.amount}</td>
-                      <td className="py-2.5">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          {txn.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <SourceBadge source={txn.source_type} size="sm" />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Support Cases & Batches */}
-        <div className="p-6 bg-slate-800/60 rounded-2xl border border-slate-700/60 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-purple-400" />
-              <h3 className="font-bold text-sm text-white">Operational Support Cases</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onOpenChat('I would like to report an issue with my settlement or soundbox')}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/80 hover:bg-slate-700 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-semibold transition"
-                title="Ask OpsSaathi about any support issue"
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
-                <span>Report Issue</span>
-              </button>
-              <span className="text-xs text-slate-400 font-mono">({cases.length})</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {cases.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 border border-dashed border-slate-700/60 rounded-xl text-xs">
-                No active operational cases. Click "Ask OpsSaathi" to report an issue.
-              </div>
-            ) : (
-              cases.map((sc) => (
-                <div
-                  key={sc.id}
-                  onClick={() => setSelectedCaseId(sc.id)}
-                  className="p-3.5 bg-slate-900/60 border border-slate-700/60 rounded-xl flex items-center justify-between gap-3 hover:border-slate-500 cursor-pointer transition"
-                >
-                  <div>
+          {transactions.length === 0 ? (
+            <EmptyState
+              title="No transactions yet"
+              description="Captured transactions will appear here once customers pay."
+            />
+          ) : (
+            <div className="bg-surface-card rounded-card border border-surface-border divide-y divide-surface-divider overflow-hidden shadow-sm">
+              {transactions.map((txn) => (
+                <div key={txn.id} className="p-3.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-xs text-sky-400">{sc.case_number}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                        {sc.status}
+                      <span className="font-mono text-xs font-semibold text-ink-primary truncate">
+                        {txn.provider_txn_id}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono">v{sc.version}</span>
+                      <SourceBadge source={txn.source_type} size="sm" />
                     </div>
-                    <p className="text-xs text-slate-300 mt-1 line-clamp-1">{sc.summary}</p>
+                    <p className="text-[11px] text-ink-secondary mt-0.5 truncate">
+                      Order: {txn.order_id}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onOpenChat(`What is the status of ${sc.case_number}: ${sc.summary}?`)
-                      }}
-                      className="p-1.5 text-sky-400 hover:text-sky-300 rounded-lg hover:bg-slate-800 transition"
-                      title="Ask OpsSaathi about this case"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedCaseId(sc.id)
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-                      title="View Timeline"
-                    >
-                      <ArrowUpRight className="h-4 w-4" />
-                    </button>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-ink-primary block">
+                      ₹{parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-status-completed-bg text-status-completed-text border border-status-completed-border mt-0.5">
+                      {txn.status}
+                    </span>
                   </div>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: SETTLEMENTS */}
+      {activeTab === 'settlements' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
+            <div>
+              <h3 className="text-sm font-semibold text-paytm-navy">
+                Bank Settlement Batches
+              </h3>
+              <p className="text-xs text-ink-secondary">
+                Payouts transferred to registered bank account
+              </p>
+            </div>
+            <SourceBadge source="SYNTHETIC_DEMO" size="sm" />
+          </div>
+
+          <div className="p-3 bg-surface-subtle rounded-xl border border-surface-border text-xs text-ink-secondary">
+            <strong>Honest Disclosure:</strong> Settlement API is production-only on Paytm. Payout verification is tested against the synthetic demo ledger.
+          </div>
+
+          {settlements.length === 0 ? (
+            <EmptyState
+              title="No settlement batches"
+              description="Settlement batches generated at cut-off will appear here."
+            />
+          ) : (
+            <div className="space-y-3">
+              {settlements.map((batch) => (
+                <Card key={batch.id} title={batch.batch_ref}>
+                  <div className="space-y-2 pt-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-ink-secondary">Net Payout Amount:</span>
+                      <span className="font-bold text-ink-primary">
+                        ₹{parseFloat(batch.net || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ink-secondary">Settlement Date:</span>
+                      <span className="font-mono text-ink-primary">
+                        {batch.expected_settlement_date || batch.date}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-surface-divider">
+                      <span className="text-[11px] text-ink-muted">
+                        Settlement Status
+                      </span>
+                      <StatusChip status={batch.status === 'SETTLED' ? 'RESOLVED' : 'IN_PROGRESS'} />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: HELP & CHAT QUICK CATEGORIES */}
+      {activeTab === 'help' && (
+        <div className="space-y-4">
+          <div className="pb-2 border-b border-surface-divider">
+            <h3 className="text-sm font-semibold text-paytm-navy">
+              Select Support Topic
+            </h3>
+            <p className="text-xs text-ink-secondary">
+              Tap any category below to immediately start autonomous diagnosis
+            </p>
+          </div>
+
+          {/* Category Chips */}
+          <div className="flex flex-wrap gap-2">
+            {categoryChips.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => triggerChat(chip.prompt)}
+                className="inline-flex min-h-12 items-center px-4 py-2 rounded-xl text-xs font-semibold bg-surface-card border border-surface-border text-paytm-navy hover:bg-paytm-cyan-light hover:border-paytm-cyan/40 transition shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-4 bg-paytm-cyan-light rounded-xl border border-paytm-cyan/30 text-xs text-paytm-navy">
+            <p className="font-semibold">Autonomous OpsSaathi Support</p>
+            <p className="mt-1 text-ink-secondary">
+              Use voice or text below to resolve missing settlements, check fee schedules, or request supervisor escalation.
+            </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Merchant Case Detail & Timeline Modal */}
-      <MerchantCaseModal
-        isOpen={!!selectedCaseId}
-        onClose={() => setSelectedCaseId(null)}
-        caseId={selectedCaseId}
-        token={token}
+      {/* Mobile Bottom Navigation Bar */}
+      <BottomNav
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        badgeCounts={{
+          help: cases.length > 0 ? cases.length : undefined,
+        }}
       />
+
+      {/* Case Details Modal */}
+      {selectedCaseId && (
+        <MerchantCaseModal
+          isOpen={Boolean(selectedCaseId)}
+          onClose={() => setSelectedCaseId(null)}
+          caseId={selectedCaseId}
+          token={token}
+        />
+      )}
     </div>
   )
 }

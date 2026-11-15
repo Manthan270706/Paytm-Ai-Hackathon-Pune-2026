@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, FC, KeyboardEvent } from 'react'
 import { ChatMessage, DiscrepancySummary } from '../types/api'
 import { EvidencePanel } from './EvidencePanel'
+import { Button } from './Button'
 import { API_BASE } from '../config'
 import {
   Send,
@@ -13,7 +14,6 @@ import {
   Volume2,
   VolumeX,
   Loader2,
-  Radio,
   AlertCircle,
   Check,
   X,
@@ -46,7 +46,7 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
   traceCount,
   activeCaseId,
   currentLanguage,
-  activeConversationId,
+  activeConversationId: _activeConversationId,
   onVoiceSessionInit,
   isReplayMode = false,
 }) => {
@@ -100,35 +100,20 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
 
   const handleSend = () => {
     if (!inputText.trim() || isSending) return
-    onSendMessage(inputText)
+    onSendMessage(inputText.trim())
     setInputText('')
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSend()
-  }
-
-  // Fallback to typed input immediately upon permission denial
-  const fallbackToTyped = (reason: string) => {
-    setIsRecording(false)
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch {
-        // ignore
-      }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
     }
-    setPermissionDenied(reason)
-    setTimeout(() => {
-      inputRef.current?.focus()
-    }, 100)
   }
 
-  // Toggle Voice Recording
+  // Voice Interaction via Web Speech API with simulated fallback
   const handleMicToggle = async () => {
-    // If currently recording, stop and allow preview
     if (isRecording) {
-      setIsRecording(false)
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop()
@@ -136,47 +121,28 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
           // ignore
         }
       }
+      setIsRecording(false)
       return
     }
 
-    setPermissionDenied(null)
-
-    // 1. Request microphone permission
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-      }
-    } catch (err: any) {
-      fallbackToTyped('Microphone permission denied. Switched to typed input immediately.')
-      return
-    }
-
-    // 2. Disclose AI identity and create voice session per PRD §5.2 / §9
-    try {
-      const token = 'demo-token-merchant-1'
-      const sessRes = await fetch(`${API_BASE}/voice/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          conversation_id: activeConversationId || undefined,
-          language: currentLanguage,
-        }),
-      })
-      if (sessRes.ok) {
-        setAiDisclosed(true)
-        if (onVoiceSessionInit) onVoiceSessionInit()
-      }
-    } catch {
-      // In offline or mock mode, keep going
+    if (!aiDisclosed) {
       setAiDisclosed(true)
     }
 
-    // 3. Start Browser Speech Recognition
+    if (onVoiceSessionInit) {
+      onVoiceSessionInit()
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    const fallbackToTyped = (reason: string) => {
+      setPermissionDenied(reason)
+      setIsRecording(false)
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+    }
 
     if (SpeechRecognition) {
       try {
@@ -185,14 +151,12 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
         recognition.continuous = true
         recognition.interimResults = true
 
-        // Map language
-        if (currentLanguage === 'hi') {
-          recognition.lang = 'hi-IN'
-        } else if (currentLanguage === 'mr') {
-          recognition.lang = 'mr-IN'
-        } else {
-          recognition.lang = 'en-IN'
-        }
+        recognition.lang =
+          currentLanguage === 'hi'
+            ? 'hi-IN'
+            : currentLanguage === 'mr'
+              ? 'mr-IN'
+              : 'en-IN'
 
         recognition.onresult = (event: any) => {
           let interimTranscript = ''
@@ -213,11 +177,9 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
         recognition.start()
         setIsRecording(true)
       } catch {
-        // Fallback to simulation if speech recognition constructor fails
         startSimulatedVoice()
       }
     } else {
-      // Fallback: Web Speech API unsupported in this environment
       startSimulatedVoice()
     }
   }
@@ -275,7 +237,6 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
 
   // Speech Synthesis Audio Playback (Sarvam AI Neural TTS + Browser Fallback)
   const handleSpeak = async (msgId: string, text: string, lang?: string) => {
-    // If currently speaking this message, stop it
     if (activeSpeakingMsgId === msgId) {
       if (audioRef.current) {
         audioRef.current.pause()
@@ -290,7 +251,6 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
       return
     }
 
-    // Stop any currently playing audio
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
@@ -299,8 +259,6 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
       window.speechSynthesis.cancel()
     }
 
-    // Determine accurate language:
-    // If text has Devanagari characters, detect if Marathi or Hindi
     let effectiveLang = (lang || currentLanguage || 'en').toLowerCase()
     if (/[\u0900-\u097F]/.test(text)) {
       if (
@@ -309,9 +267,7 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
         text.includes('नाही') ||
         text.includes('तफावत') ||
         text.includes('बॅच') ||
-        text.includes('झाले') ||
-        text.includes('केले') ||
-        text.includes('पेमेंट्स')
+        text.includes('झाले')
       ) {
         effectiveLang = 'mr'
       } else if (effectiveLang === 'en') {
@@ -319,7 +275,6 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
       }
     }
 
-    // 1. Try Backend Neural TTS (Sarvam AI) for pure vernacular voice
     setIsSynthesizingMsgId(msgId)
     try {
       const token = 'demo-token-merchant-1'
@@ -348,130 +303,80 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
             audioRef.current = null
           }
           audio.onerror = () => {
-            setActiveSpeakingMsgId(null)
-            audioRef.current = null
+            playBrowserSpeech(text, effectiveLang, msgId)
           }
-          await audio.play()
+          audio.play().catch(() => {
+            playBrowserSpeech(text, effectiveLang, msgId)
+          })
           return
         }
       }
-    } catch (err) {
-      console.warn('Backend Sarvam TTS fetch error, falling back to browser speech synthesis:', err)
-    } finally {
-      setIsSynthesizingMsgId(null)
+      playBrowserSpeech(text, effectiveLang, msgId)
+    } catch {
+      playBrowserSpeech(text, effectiveLang, msgId)
     }
+  }
 
-    // 2. Fallback to Browser Speech Synthesis
-    if (window.speechSynthesis) {
+  const playBrowserSpeech = (text: string, lang: string, msgId: string) => {
+    setIsSynthesizingMsgId(null)
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      setActiveSpeakingMsgId(msgId)
       const utterance = new SpeechSynthesisUtterance(text)
-      const voices = window.speechSynthesis.getVoices()
-
-      const marathiVoice = voices.find(
-        (v) =>
-          v.lang === 'mr-IN' ||
-          v.lang.toLowerCase().startsWith('mr') ||
-          v.name.toLowerCase().includes('marathi')
-      )
-      const hindiVoice = voices.find(
-        (v) =>
-          v.lang === 'hi-IN' ||
-          v.lang.toLowerCase().startsWith('hi') ||
-          v.name.toLowerCase().includes('hindi')
-      )
-
-      if (effectiveLang === 'mr') {
-        if (marathiVoice) {
-          utterance.voice = marathiVoice
-          utterance.lang = marathiVoice.lang
-        } else if (hindiVoice) {
-          // Fallback to Hindi voice for Devanagari phonetics so words are not skipped
-          utterance.voice = hindiVoice
-          utterance.lang = hindiVoice.lang
-        } else {
-          utterance.lang = 'hi-IN'
-        }
-      } else if (effectiveLang === 'hi') {
-        if (hindiVoice) {
-          utterance.voice = hindiVoice
-          utterance.lang = hindiVoice.lang
-        } else {
-          utterance.lang = 'hi-IN'
-        }
-      } else {
-        const englishIndianVoice = voices.find(
-          (v) => v.lang === 'en-IN' || v.name.toLowerCase().includes('india')
-        )
-        if (englishIndianVoice) {
-          utterance.voice = englishIndianVoice
-        }
-        utterance.lang = 'en-IN'
-      }
-
+      utterance.lang = lang === 'hi' ? 'hi-IN' : lang === 'mr' ? 'mr-IN' : 'en-IN'
       utterance.onend = () => setActiveSpeakingMsgId(null)
       utterance.onerror = () => setActiveSpeakingMsgId(null)
-      setActiveSpeakingMsgId(msgId)
       window.speechSynthesis.speak(utterance)
-    } else {
-      setActiveSpeakingMsgId(null)
     }
   }
 
   return (
-    <div className="flex flex-col h-[700px] bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-      {/* Workspace Header */}
-      <div className="p-4 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between">
+    <div className="bg-surface-card rounded-card border border-surface-border shadow-sm flex flex-col font-sans text-ink-primary overflow-hidden h-[540px]">
+      {/* Header */}
+      <div className="p-3.5 bg-surface-card border-b border-surface-divider flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-sky-500 to-cyan-400 flex items-center justify-center text-slate-950 shadow-md shadow-sky-500/20">
-            <Bot className="h-5 w-5" />
+          <div className="w-9 h-9 rounded-full bg-paytm-navy text-white flex items-center justify-center font-bold text-xs shadow-xs">
+            <Bot className="w-4 h-4 text-paytm-cyan" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-white">OpsSaathi AI Workspace</span>
-              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Online
+              <h3 className="font-semibold text-sm text-paytm-navy">OpsSaathi AI</h3>
+              <span className="text-[10px] font-semibold uppercase bg-status-completed-bg text-status-completed-text border border-status-completed-border px-1.5 py-0.2 rounded-full">
+                Active
               </span>
-              {aiDisclosed && (
-                <span className="text-[10px] text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Radio className="h-3 w-3" />
-                  Voice Enabled
-                </span>
-              )}
               {isReplayMode && (
-                <span
-                  className="text-[10px] text-amber-300 font-semibold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"
-                  title="Serving deterministic cached golden scenario (PRD §12.3 Replay Mode)"
-                >
-                  <RotateCcw className="h-2.5 w-2.5" />
-                  Replay Mode
+                <span className="text-[10px] font-medium bg-status-approval-bg text-status-approval-text border border-status-approval-border px-1.5 py-0.2 rounded-full flex items-center gap-1">
+                  <RotateCcw className="w-2.5 h-2.5" />
+                  Replay
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400">
-              Disclosed AI Teammate • Autonomous resolution with verified truth
+            <p className="text-[11px] text-ink-muted">
+              Autonomous settlement diagnosis • Vernacular voice
             </p>
           </div>
         </div>
 
         <button
+          type="button"
           onClick={onToggleTrace}
-          className="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 bg-sky-950/40 border border-sky-800/60 px-3 py-1.5 rounded-lg font-mono transition"
+          className="flex items-center gap-1.5 text-xs text-paytm-navy hover:bg-paytm-cyan-light border border-paytm-cyan/30 px-3 py-1.5 rounded-lg font-medium transition"
         >
           <Terminal className="h-3.5 w-3.5" />
           <span>Trace ({traceCount})</span>
         </button>
       </div>
 
-      {/* Permission Denied Alert Banner */}
+      {/* Permission Denied Alert */}
       {permissionDenied && (
-        <div className="px-4 py-2.5 bg-rose-950/80 border-b border-rose-800/80 flex items-center justify-between text-xs text-rose-200 animate-fadeIn">
+        <div className="px-4 py-2 bg-status-rejected-bg border-b border-status-rejected-border flex items-center justify-between text-xs text-status-rejected-text">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+            <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{permissionDenied}</span>
           </div>
           <button
+            type="button"
             onClick={() => setPermissionDenied(null)}
-            className="text-rose-400 hover:text-rose-200 text-xs px-2 py-0.5 rounded"
+            className="text-xs font-semibold underline"
           >
             Dismiss
           </button>
@@ -479,16 +384,18 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
       )}
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-surface-canvas">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
-            <div className="h-12 w-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+            <div className="h-12 w-12 rounded-full bg-paytm-cyan-light border border-paytm-cyan/30 flex items-center justify-center text-paytm-navy">
               <Sparkles className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">How can OpsSaathi help today?</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                Report missing settlements by typing or speaking in English, हिन्दी, or मराठी.
+              <h3 className="text-sm font-semibold text-paytm-navy">
+                How can OpsSaathi help today?
+              </h3>
+              <p className="text-xs text-ink-secondary mt-1 max-w-sm">
+                Ask about missing settlements, payout delays, or fee calculations in English, हिन्दी, or मराठी.
               </p>
             </div>
           </div>
@@ -504,68 +411,58 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
             return (
               <div
                 key={msg.id}
-                className={`flex gap-3 max-w-[85%] ${isUser ? 'ml-auto flex-row-reverse' : ''}`}
+                className={`flex gap-2.5 max-w-[85%] ${isUser ? 'ml-auto flex-row-reverse' : ''}`}
               >
                 <div
-                  className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
                     isUser
-                      ? 'bg-sky-500 text-slate-950'
-                      : 'bg-slate-800 text-sky-400 border border-slate-700'
+                      ? 'bg-paytm-navy text-white'
+                      : 'bg-surface-card border border-surface-border text-paytm-navy'
                   }`}
                 >
-                  {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                  {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5 text-paytm-cyan" />}
                 </div>
 
                 <div className="space-y-2">
                   <div
-                    className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
+                    className={`p-3 rounded-xl text-xs sm:text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-sky-600 text-white rounded-tr-none'
-                        : 'bg-slate-800/90 text-slate-200 border border-slate-700/80 rounded-tl-none'
+                        ? 'bg-paytm-navy text-white rounded-tr-none shadow-xs'
+                        : 'bg-surface-card text-ink-primary border border-surface-border rounded-tl-none shadow-xs'
                     }`}
                   >
-                    {/* Channel Tag */}
                     {isVoice && (
-                      <div className="flex items-center gap-1 text-[10px] text-sky-200/90 mb-1 font-semibold">
+                      <div className="flex items-center gap-1 text-[10px] text-paytm-cyan font-semibold mb-1">
                         <Mic className="h-3 w-3" />
-                        <span>Voice Submission</span>
-                      </div>
-                    )}
-
-                    {/* Replay Cache Badge */}
-                    {msg.is_replay && (
-                      <div className="flex items-center gap-1 text-[10px] text-amber-300 font-semibold bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full w-fit mb-1 shadow-sm">
-                        <RotateCcw className="h-2.5 w-2.5" />
-                        <span>Replay Cache</span>
+                        <span>Voice Turn</span>
                       </div>
                     )}
 
                     <div className="whitespace-pre-wrap">{msg.content}</div>
 
-                    {/* Speech Synthesis Audio Button on Assistant Message */}
                     {!isUser && (
-                      <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center gap-2">
+                      <div className="mt-2 pt-2 border-t border-surface-divider flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => handleSpeak(msg.id, msg.content, msg.language)}
                           className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition ${
                             isSpeaking
-                              ? 'bg-sky-500 text-slate-950 font-semibold shadow-sm'
+                              ? 'bg-paytm-navy text-white font-semibold'
                               : isSynthesizing
-                              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 font-medium'
-                              : 'text-slate-400 hover:text-sky-300 hover:bg-slate-700/50'
+                              ? 'bg-paytm-cyan-light text-paytm-navy font-medium'
+                              : 'text-ink-secondary hover:text-paytm-navy hover:bg-surface-subtle'
                           }`}
-                          title="Speak reply aloud (Sarvam AI / Neural Vernacular Voice)"
                           disabled={isSynthesizing}
                         >
                           {isSpeaking ? (
                             <>
                               <VolumeX className="h-3.5 w-3.5" />
-                              <span>Stop Audio</span>
+                              <span>Stop Voice</span>
                             </>
                           ) : isSynthesizing ? (
                             <>
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              <span>Loading Voice...</span>
+                              <span>Loading Audio...</span>
                             </>
                           ) : (
                             <>
@@ -578,7 +475,7 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
                     )}
                   </div>
 
-                  {/* Evidence & Investigation Panel on latest assistant message if available */}
+                  {/* Evidence Card on Latest Assistant Message */}
                   {isLatestAssistant && evidenceSummary && (
                     <div className="pt-1">
                       <EvidencePanel
@@ -595,13 +492,13 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
         )}
 
         {isSending && (
-          <div className="flex gap-3 max-w-[80%]">
-            <div className="h-8 w-8 rounded-lg bg-slate-800 text-sky-400 border border-slate-700 flex items-center justify-center shrink-0">
-              <Bot className="h-4 w-4 animate-spin" />
+          <div className="flex gap-2.5 max-w-[80%]">
+            <div className="w-7 h-7 rounded-full bg-surface-card border border-surface-border text-paytm-navy flex items-center justify-center shrink-0">
+              <Bot className="w-3.5 h-3.5 animate-spin text-paytm-cyan" />
             </div>
-            <div className="p-3.5 bg-slate-800/90 text-slate-400 text-xs rounded-2xl rounded-tl-none border border-slate-700/80 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-sky-400 animate-ping" />
-              <span>OpsSaathi is investigating ledger & applying policy...</span>
+            <div className="p-3 bg-surface-card border border-surface-border rounded-xl rounded-tl-none text-xs text-ink-secondary flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-paytm-navy" />
+              <span>Verifying ledger transactions...</span>
             </div>
           </div>
         )}
@@ -609,160 +506,105 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Live Voice Recording & Transcript Preview Card */}
-      {(isRecording || transcriptPreview) && (
-        <div className="m-3 p-3.5 bg-slate-950/95 border border-sky-500/40 rounded-xl shadow-2xl animate-fadeIn space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="relative flex items-center justify-center">
-                <span className="absolute h-6 w-6 rounded-full bg-rose-500/30 animate-ping" />
-                <span className="relative h-4 w-4 rounded-full bg-rose-500 flex items-center justify-center text-white">
-                  <Mic className="h-2.5 w-2.5" />
-                </span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white">
-                    {isRecording ? 'Listening...' : 'Transcript Preview'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {isRecording ? `00:${recordingSeconds < 10 ? '0' : ''}${recordingSeconds}` : ''}
-                  </span>
-                </div>
-                <p className="text-[10px] text-amber-400 flex items-center gap-1">
-                  <Radio className="h-3 w-3" />
-                  AI-Identity Disclosed • OpsSaathi AI Operations Teammate
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              {isRecording && (
-                <button
-                  onClick={handleMicToggle}
-                  className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-medium transition"
-                >
-                  Done Speaking
-                </button>
-              )}
-              <button
-                onClick={handleCancelVoice}
-                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition"
-                title="Cancel Voice"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      {/* Voice Review Drawer */}
+      {isRecording && (
+        <div className="p-3 bg-surface-subtle border-t border-surface-border space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 text-status-rejected-text font-semibold">
+              <span className="w-2 h-2 rounded-full bg-status-rejected-text animate-ping" />
+              Listening ({recordingSeconds}s)...
+            </span>
+            <button
+              type="button"
+              onClick={handleEditInInput}
+              className="text-paytm-navy hover:underline flex items-center gap-1 text-[11px]"
+            >
+              <Edit3 className="w-3 h-3" />
+              <span>Edit as text</span>
+            </button>
           </div>
-
-          {/* Transcript editable box */}
-          <div className="bg-slate-900 border border-slate-700/80 rounded-lg p-2.5">
-            <textarea
-              value={transcriptPreview}
-              onChange={(e) => setTranscriptPreview(e.target.value)}
-              placeholder="Speak now or edit transcript preview here..."
-              rows={2}
-              className="w-full bg-transparent text-xs text-slate-100 placeholder-slate-500 outline-none resize-none"
-            />
+          <div className="p-2 bg-surface-card rounded-lg border border-surface-border text-xs text-ink-primary font-medium min-h-12 flex items-center">
+            {transcriptPreview || 'Listening for speech in ' + currentLanguage + '...'}
           </div>
-
-          {/* Preview Action Buttons */}
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={handleEditInInput}
-                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition border border-slate-700"
-              >
-                <Edit3 className="h-3 w-3" />
-                <span>Type Instead</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCancelVoice}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg text-xs transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitVoiceTranscript}
-                disabled={!transcriptPreview.trim() || isSending}
-                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Check className="h-3.5 w-3.5" />
-                <span>Submit Voice</span>
-              </button>
-            </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancelVoice}
+              className="px-3 py-1.5 rounded-lg text-xs text-ink-secondary hover:bg-surface-subtle min-h-10"
+            >
+              <X className="w-3.5 h-3.5 inline mr-1" />
+              Cancel
+            </button>
+            <Button
+              variant="primary"
+              onClick={handleSubmitVoiceTranscript}
+              disabled={!transcriptPreview.trim() || isSending}
+              className="text-xs min-h-10 px-3"
+            >
+              <Check className="w-3.5 h-3.5 inline mr-1" />
+              Submit
+            </Button>
           </div>
         </div>
       )}
 
       {/* Suggested Quick Prompts */}
-      <div className="px-4 py-2 bg-slate-950/50 border-t border-slate-800/80 flex gap-2 overflow-x-auto text-xs scrollbar-none">
+      <div className="px-3 py-2 bg-surface-card border-t border-surface-divider flex gap-2 overflow-x-auto text-xs">
         <button
-          onClick={() => onSendMessage('My ₹6,000 payment from yesterday is missing from settlement')}
+          type="button"
+          onClick={() => onSendMessage('Why is ₹6,000.00 missing from my settlement on 12 Nov?')}
           disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-sky-300 font-medium px-3 py-1.5 rounded-lg border border-sky-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="shrink-0 bg-surface-subtle hover:bg-paytm-cyan-light text-paytm-navy border border-surface-border hover:border-paytm-cyan/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
         >
           Missing ₹6,000 from settlement
         </button>
         <button
-          onClick={() => onSendMessage('Customer was debited twice for ₹1,200 refund on Order ORD_20261111_09')}
+          type="button"
+          onClick={() => onSendMessage('Customer debited twice for ₹1,200 refund on Order ORD_20261111_09')}
           disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="shrink-0 bg-surface-subtle hover:bg-surface-border text-ink-secondary px-3 py-1.5 rounded-lg text-xs font-medium transition"
         >
-          Refund debited twice (₹1,200)
+          Double debit refund (₹1,200)
         </button>
         <button
-          onClick={() => onSendMessage('My RuPay MDR rate was charged at 2.15% instead of 1.20%')}
+          type="button"
+          onClick={() => onSendMessage('Paytm Soundbox did not announce ₹450 payment')}
           disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="shrink-0 bg-surface-subtle hover:bg-surface-border text-ink-secondary px-3 py-1.5 rounded-lg text-xs font-medium transition"
         >
-          RuPay MDR fee overcharge
+          Soundbox audio issue
         </button>
         <button
-          onClick={() => onSendMessage('Paytm Soundbox 4G audio announcement delayed by 40s during rush hours')}
-          disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Soundbox audio announcement delayed
-        </button>
-        <button
-          onClick={() => onSendMessage('Payout batch BATCH_20261114_03 delayed by 4 hours due to IMPS timeout (₹18,500.00)')}
-          disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Payout delayed (₹18,500)
-        </button>
-        <button
+          type="button"
           onClick={() => onSendMessage('माझे ₹६,००० चे पेमेंट सेटलमेंटमध्ये का नाही?')}
           disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="shrink-0 bg-surface-subtle hover:bg-surface-border text-ink-secondary px-3 py-1.5 rounded-lg text-xs font-medium transition"
         >
           मराठी: सेटलमेंट अडकले आहे
         </button>
         <button
+          type="button"
           onClick={() => onSendMessage('कल का ₹6,000 सेटलमेंट बैंक खाते में अभी तक नहीं आया')}
           disabled={isSending}
-          className="shrink-0 bg-slate-800 hover:bg-slate-700/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="shrink-0 bg-surface-subtle hover:bg-surface-border text-ink-secondary px-3 py-1.5 rounded-lg text-xs font-medium transition"
         >
           हिन्दी: सेटलमेंट जांचें
         </button>
       </div>
 
       {/* Input Bar */}
-      <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+      <div className="p-3 bg-surface-card border-t border-surface-border flex items-center gap-2">
         <button
+          type="button"
           onClick={handleMicToggle}
-          className={`p-2.5 rounded-xl border transition ${
+          className={`min-h-12 min-w-12 rounded-xl flex items-center justify-center border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan ${
             isRecording
-              ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
-              : 'bg-slate-800 text-sky-400 border-slate-700 hover:bg-slate-700'
+              ? 'bg-status-rejected-bg text-status-rejected-text border-status-rejected-border animate-pulse'
+              : 'bg-surface-subtle text-paytm-navy border-surface-border hover:bg-paytm-cyan-light'
           }`}
-          title={isRecording ? 'Stop Recording' : 'Start Voice Input (Mic Permission & AI Disclosed)'}
+          title={isRecording ? 'Stop Recording' : 'Start Voice Turn'}
         >
-          {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
         </button>
 
         <input
@@ -771,22 +613,19 @@ export const ChatWorkspace: FC<ChatWorkspaceProps> = ({
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={
-            permissionDenied
-              ? 'Type here (Microphone fallback active)...'
-              : 'Ask OpsSaathi in English, हिन्दी, or मराठी...'
-          }
+          placeholder="Ask OpsSaathi in English, हिन्दी, or मराठी..."
           disabled={isSending}
-          className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-sky-500 transition"
+          className="flex-1 min-h-12 bg-surface-subtle border border-surface-border rounded-xl px-4 text-sm text-ink-primary placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan transition"
         />
 
         <button
+          type="button"
           onClick={handleSend}
           disabled={!inputText.trim() || isSending}
-          className="p-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-sky-500/20"
-          title="Send Message"
+          className="min-h-12 min-w-12 rounded-xl bg-paytm-navy hover:bg-paytm-navy-hover text-white flex items-center justify-center font-bold transition disabled:opacity-50 disabled:cursor-not-allowed shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan"
+          title="Send"
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-5 w-5" />
         </button>
       </div>
     </div>

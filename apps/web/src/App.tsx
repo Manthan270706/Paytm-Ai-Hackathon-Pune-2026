@@ -830,7 +830,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-surface-canvas text-ink-primary flex flex-col font-sans">
       <Header
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
@@ -925,6 +925,10 @@ export default function App() {
         health={health}
         isLoading={isLoadingHealth}
       />
+
+      <footer className="py-4 px-4 text-center text-xs text-ink-muted border-t border-surface-divider bg-surface-card">
+        <p>Hackathon prototype for the Paytm Build for India AI Hackathon; not affiliated with or endorsed by Paytm</p>
+      </footer>
     </div>
   )
 }
