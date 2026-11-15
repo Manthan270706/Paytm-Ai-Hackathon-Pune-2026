@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { OutcomeMetrics } from '../types/api'
-import { Clock, Zap, CheckCircle2, RotateCcw, AlertTriangle, MessageSquare } from 'lucide-react'
+import { Clock, Zap, CheckCircle2, RotateCcw, ShieldCheck } from 'lucide-react'
 
 interface MetricsTileProps {
   metrics: OutcomeMetrics | null
@@ -12,22 +12,20 @@ export const MetricsTile: FC<MetricsTileProps> = ({ metrics, isLoading = false, 
   if (!metrics) return null
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="bg-surface-card border border-surface-border rounded-card p-4 shadow-sm space-y-3 font-sans text-ink-primary">
+      <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
         <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-amber-400" />
-          <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+          <Zap className="w-4 h-4 text-paytm-navy" />
+          <h3 className="text-sm font-semibold text-paytm-navy uppercase tracking-wider">
             Operational Outcome Metrics
           </h3>
-          <span className="text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full">
-            REAL-TIME FROM CASE EVENTS
-          </span>
         </div>
         {onRefresh && (
           <button
+            type="button"
             onClick={onRefresh}
             disabled={isLoading}
-            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition disabled:opacity-50"
+            className="text-xs text-paytm-navy hover:bg-surface-subtle flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-surface-border transition disabled:opacity-50"
             title="Refresh outcome metrics from backend"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -36,74 +34,60 @@ export const MetricsTile: FC<MetricsTileProps> = ({ metrics, isLoading = false, 
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Metric 1: Time to First Response */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
+        <div className="bg-surface-subtle border border-surface-border rounded-lg p-3">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-[11px] font-medium">First Response</span>
-            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <Clock className="w-3.5 h-3.5 text-paytm-navy" />
           </div>
-          <div className="text-xl font-black text-white tracking-tight">
+          <div className="text-xl font-bold text-ink-primary tracking-tight font-mono">
             {metrics.time_to_first_response_seconds}s
           </div>
-          <div className="text-[10px] text-cyan-400/80 font-medium mt-1">
+          <div className="text-[10px] text-ink-muted mt-0.5">
             Instant AI triage
           </div>
         </div>
 
         {/* Metric 2: Time to Verified Resolution */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
+        <div className="bg-surface-subtle border border-surface-border rounded-lg p-3">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-[11px] font-medium">Resolution Time</span>
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-status-completed-text" />
           </div>
-          <div className="text-xl font-black text-emerald-400 tracking-tight">
+          <div className="text-xl font-bold text-ink-primary tracking-tight font-mono">
             {metrics.time_to_verified_resolution_minutes}m
           </div>
-          <div className="text-[10px] text-emerald-400/80 font-medium mt-1">
-            Independent verification PASS
+          <div className="text-[10px] text-status-completed-text mt-0.5 font-medium">
+            vs 24h manual SLA
           </div>
         </div>
 
-        {/* Metric 3: Straight-Through Processing */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-medium">STP Rate</span>
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
+        {/* Metric 3: Straight Through Processing (STP) Rate */}
+        <div className="bg-surface-subtle border border-surface-border rounded-lg p-3">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
+            <span className="text-[11px] font-medium">STP Deflection</span>
+            <Zap className="w-3.5 h-3.5 text-paytm-navy" />
           </div>
-          <div className="text-xl font-black text-amber-400 tracking-tight">
+          <div className="text-xl font-bold text-paytm-navy tracking-tight font-mono">
             {metrics.straight_through_processing_rate_percent}%
           </div>
-          <div className="text-[10px] text-slate-400 font-medium mt-1">
-            Straight-through handling
+          <div className="text-[10px] text-ink-muted mt-0.5">
+            Automated verification
           </div>
         </div>
 
-        {/* Metric 4: Handled vs Escalated */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
+        {/* Metric 4: Total Cases Handled */}
+        <div className="bg-surface-subtle border border-surface-border rounded-lg p-3">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-[11px] font-medium">Cases Handled</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
+            <ShieldCheck className="w-3.5 h-3.5 text-status-completed-text" />
           </div>
-          <div className="text-xl font-black text-purple-300 tracking-tight">
+          <div className="text-xl font-bold text-status-completed-text tracking-tight font-mono">
             {metrics.total_cases_handled}
           </div>
-          <div className="text-[10px] text-purple-400/80 font-medium mt-1">
-            {metrics.total_cases_escalated} escalated to human
-          </div>
-        </div>
-
-        {/* Metric 5: Repeat Explanations Avoided */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[11px] font-medium">Repeat Explanations</span>
-            <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-          </div>
-          <div className="text-xl font-black text-indigo-300 tracking-tight">
-            {metrics.repeat_explanations_avoided}
-          </div>
-          <div className="text-[10px] text-indigo-400/80 font-medium mt-1">
-            Channel continuity preserved
+          <div className="text-[10px] text-status-completed-text mt-0.5 font-medium">
+            {metrics.repeat_explanations_avoided} repeat issues avoided
           </div>
         </div>
       </div>

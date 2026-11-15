@@ -2,6 +2,7 @@ import { FC } from 'react'
 import { SupportCaseItem, ApprovalSummary } from '../types/api'
 import { SourceBadge } from './SourceBadge'
 import { ShieldCheck, X, AlertTriangle, CheckCircle2, Lock } from 'lucide-react'
+import { Button } from './Button'
 
 interface ApprovalModalProps {
   isOpen: boolean
@@ -36,53 +37,59 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 text-slate-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="approval-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-primary/50 backdrop-blur-sm animate-in fade-in duration-200 font-sans"
+    >
+      <div className="bg-surface-card border border-surface-border rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-5 text-ink-primary">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-start justify-between border-b border-surface-divider pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+            <div className="p-2.5 rounded-xl bg-status-approval-bg border border-status-approval-border text-status-approval-text">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">
+              <h3 id="approval-modal-title" className="text-base font-bold text-paytm-navy tracking-tight">
                 Authorize Gated Action
               </h3>
-              <p className="text-xs text-slate-400">
-                Human Supervisor Authorization (Policy Rule #3 &amp; PRD §5.3)
+              <p className="text-xs text-ink-secondary">
+                Human Supervisor Authorization (Two-key discipline)
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={isApproving}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            aria-label="Close dialog"
+            className="flex items-center justify-center w-10 h-10 min-h-12 min-w-12 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Policy Trigger Banner */}
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs flex items-start gap-2.5 text-amber-300">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+        <div className="p-3 bg-status-approval-bg border border-status-approval-border rounded-xl text-xs flex items-start gap-2.5 text-status-approval-text">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <div>
-            <span className="font-semibold text-amber-200">Policy Gate Triggered: </span>
-            The autonomous agent computed an operational action ({pendingApproval?.action || 'SETTLEMENT_RESYNC'}) with value ₹{formattedDiscrepancy}. Per Policy Rule
-            #3, automated actions exceeding the ₹5,000 threshold require explicit human supervisor authorization.
+            <span className="font-semibold">Policy Gate Triggered: </span>
+            The autonomous agent computed an operational action ({pendingApproval?.action || 'SETTLEMENT_RESYNC'}) with value ₹{formattedDiscrepancy}. Automated actions exceeding ₹5,000 require explicit supervisor sign-off.
           </div>
         </div>
 
         {/* Action Details & Discrepancy Evidence */}
         <div className="space-y-3 text-xs">
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+            <div className="p-3 bg-surface-subtle rounded-xl border border-surface-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-ink-secondary tracking-wider">
                 Action Type
               </span>
-              <div className="font-mono font-bold text-purple-400 text-sm">
+              <div className="font-mono font-bold text-paytm-navy text-sm">
                 {pendingApproval?.action || 'SETTLEMENT_RESYNC'}
               </div>
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
+              <div className="text-[11px] text-ink-secondary flex items-center gap-1.5 mt-1">
                 <span>Target:</span>
                 <SourceBadge
                   source={
@@ -97,61 +104,63 @@ export const ApprovalModal: FC<ApprovalModalProps> = ({
               </div>
             </div>
 
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                Amount / Discrepancy
+            <div className="p-3 bg-surface-subtle rounded-xl border border-surface-border space-y-1">
+              <span className="text-[10px] uppercase font-bold text-ink-secondary tracking-wider">
+                Discrepancy Value
               </span>
-              <div className="font-mono font-bold text-amber-400 text-sm">₹{formattedDiscrepancy}</div>
-              <div className="text-[11px] text-slate-400 mt-1">
-                Status: <span className="text-amber-400 font-semibold">{caseItem.status}</span>
+              <div className="font-mono font-bold text-status-approval-text text-sm">
+                ₹{formattedDiscrepancy}
+              </div>
+              <div className="text-[11px] text-ink-secondary mt-1">
+                Status: <span className="font-semibold text-paytm-navy">{caseItem.status}</span>
               </div>
             </div>
           </div>
 
           {/* Canonical Action Payload / Fingerprint */}
-          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 font-mono text-[11px] space-y-1.5">
-            <div className="flex items-center justify-between text-slate-400 pb-1 border-b border-slate-800">
+          <div className="p-3 bg-surface-canvas rounded-xl border border-surface-border font-mono text-[11px] space-y-1.5">
+            <div className="flex items-center justify-between text-ink-secondary pb-1 border-b border-surface-divider">
               <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold">
-                <Lock className="h-3 w-3 text-sky-400" /> Tamper-Proof Resume Contract
+                <Lock className="h-3 w-3 text-paytm-navy" /> Tamper-Proof Resume Contract
               </span>
-              <span className="text-purple-400 font-semibold">Case v{caseItem.version}</span>
+              <span className="text-paytm-navy font-semibold">Case v{caseItem.version}</span>
             </div>
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-ink-secondary">
               <span>Case Number:</span>
-              <span className="text-slate-200">{caseItem.case_number}</span>
+              <span className="text-ink-primary font-medium">{caseItem.case_number}</span>
             </div>
             <div>
-              <span className="text-slate-400">SHA-256 Action Hash:</span>
-              <div className="mt-0.5 p-1.5 bg-slate-900 rounded border border-slate-800 text-[10px] text-sky-300 break-all select-all font-mono">
+              <span className="text-ink-secondary">SHA-256 Action Hash:</span>
+              <div className="mt-0.5 p-1.5 bg-surface-card rounded border border-surface-border text-[10px] text-paytm-navy break-all select-all font-mono">
                 {actionHash}
               </div>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-400 italic">
-            Resuming this action will verify the action hash, assert optimistic case version,
-            dispatch an idempotent re-sync to Settlement Operations, and advance the case to
-            verifying.
+          <p className="text-[11px] text-ink-muted italic">
+            Authorizing this action will verify the action hash, assert optimistic case version concurrency, and dispatch an idempotent re-sync to Settlement Operations.
           </p>
         </div>
 
         {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
-          <button
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-surface-divider">
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={isApproving}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-50"
+            className="text-xs min-h-10 px-4"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleApprove}
             disabled={isApproving}
-            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold text-xs transition shadow-lg shadow-emerald-600/25 disabled:opacity-50"
+            className="text-xs min-h-10 px-4 gap-2"
           >
             <CheckCircle2 className={`h-4 w-4 ${isApproving ? 'animate-spin' : ''}`} />
             <span>{isApproving ? 'Resuming Action...' : `Confirm & Authorize ${pendingApproval?.action || 'Action'}`}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState, FC } from 'react'
 import { PlusCircle, X, Layers, AlertCircle } from 'lucide-react'
+import { Button } from './Button'
 
 interface CreateCaseModalProps {
   isOpen: boolean
@@ -115,25 +116,34 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 text-slate-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-case-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-primary/50 backdrop-blur-sm animate-in fade-in duration-200 font-sans"
+    >
+      <div className="bg-surface-card border border-surface-border rounded-2xl max-w-xl w-full p-6 shadow-xl space-y-5 text-ink-primary">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-start justify-between border-b border-surface-divider pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
+            <div className="p-2.5 rounded-xl bg-paytm-cyan-light border border-paytm-cyan/30 text-paytm-navy">
               <PlusCircle className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">Create Support Case</h3>
-              <p className="text-xs text-slate-400">
+              <h3 id="create-case-title" className="text-base font-bold text-paytm-navy tracking-tight">
+                Create Support Case
+              </h3>
+              <p className="text-xs text-ink-secondary">
                 Register a new operational investigation ticket across queues
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            aria-label="Close dialog"
+            className="flex items-center justify-center w-10 h-10 min-h-12 min-w-12 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paytm-cyan"
           >
             <X className="h-5 w-5" />
           </button>
@@ -141,9 +151,9 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
 
         {/* Quick Scenario Templates */}
         <div className="space-y-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Layers className="h-3 w-3 text-sky-400" />
-            Quick Scenario Presets
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary flex items-center gap-1">
+            <Layers className="h-3 w-3 text-paytm-navy" />
+            Quick Presets
           </span>
           <div className="flex flex-wrap gap-1.5">
             {QUICK_TEMPLATES.map((tpl, i) => (
@@ -151,7 +161,7 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
                 key={i}
                 type="button"
                 onClick={() => applyTemplate(tpl)}
-                className="text-[10px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700/80 text-slate-300 border border-slate-700 rounded-lg transition"
+                className="text-[11px] px-2.5 py-1 bg-surface-subtle hover:bg-surface-border text-ink-primary border border-surface-border rounded-lg transition"
               >
                 {tpl.category.replace('_', ' ')}
               </button>
@@ -162,8 +172,8 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+            <div className="p-3 bg-status-rejected-bg border border-status-rejected-border rounded-xl text-xs text-status-rejected-text flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -171,13 +181,13 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Category */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              <label className="block text-[11px] font-semibold text-ink-primary mb-1">
                 Category
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 transition"
+                className="w-full bg-surface-subtle border border-surface-border rounded-xl p-2.5 text-xs text-ink-primary outline-none focus:border-paytm-cyan transition"
               >
                 {CATEGORIES.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -189,13 +199,13 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
 
             {/* Target Queue */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              <label className="block text-[11px] font-semibold text-ink-primary mb-1">
                 Assigned Queue
               </label>
               <select
                 value={queue}
                 onChange={(e) => setQueue(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 transition"
+                className="w-full bg-surface-subtle border border-surface-border rounded-xl p-2.5 text-xs text-ink-primary outline-none focus:border-paytm-cyan transition"
               >
                 {QUEUES.map((q) => (
                   <option key={q.id} value={q.id}>
@@ -208,11 +218,11 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
 
           {/* Priority */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-300 mb-1">Priority</label>
+            <label className="block text-[11px] font-semibold text-ink-primary mb-1">Priority</label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 transition"
+              className="w-full bg-surface-subtle border border-surface-border rounded-xl p-2.5 text-xs text-ink-primary outline-none focus:border-paytm-cyan transition"
             >
               {PRIORITIES.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -224,36 +234,37 @@ export const CreateCaseModal: FC<CreateCaseModalProps> = ({
 
           {/* Summary */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-              Case Summary &amp; Details <span className="text-rose-400">*</span>
+            <label className="block text-[11px] font-semibold text-ink-primary mb-1">
+              Case Summary &amp; Details <span className="text-status-rejected-text">*</span>
             </label>
             <textarea
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Describe the transaction reference, amounts, or discrepancy in detail..."
               rows={3}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500 transition"
+              className="w-full bg-surface-subtle border border-surface-border rounded-xl p-2.5 text-xs text-ink-primary placeholder:text-ink-muted outline-none focus:border-paytm-cyan transition"
             />
           </div>
 
           {/* Modal Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-            <button
-              type="button"
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-surface-divider">
+            <Button
+              variant="secondary"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-50"
+              className="text-xs min-h-10 px-4"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition shadow-lg shadow-sky-500/25 disabled:opacity-50"
+              className="text-xs min-h-10 px-4 gap-2"
             >
               <PlusCircle className={`h-4 w-4 ${isSubmitting ? 'animate-spin' : ''}`} />
               <span>{isSubmitting ? 'Creating Case...' : 'Create Case'}</span>
-            </button>
+            </Button>
           </div>
         </form>
       </div>

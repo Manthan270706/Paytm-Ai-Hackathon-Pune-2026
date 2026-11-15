@@ -89,3 +89,25 @@ Do not overwrite previous handoffs.
 - Left to do: U6-A5 (Operations console redesign), U6-A6 (Copy and agent tone), U6-A7 (Accessibility fixes), U6-A8 (Visual QA and regression)
 - Gotchas: All mobile screens are 390px thumb-friendly without horizontal scroll. Technical traces and hashes are collapsed behind an expander to eliminate AI slop.
 - Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
+
+---
+
+## U6-A5: Operations console redesign (Antigravity, 15 Nov 2026, 14:52 IST)
+- Status: done
+- Branch: upscale/u6-a5
+- Files changed: apps/web/src/components/OperationsConsole.tsx, apps/web/src/components/ApprovalModal.tsx, apps/web/src/components/RejectModal.tsx, apps/web/src/components/CreateCaseModal.tsx, apps/web/src/components/MetricsTile.tsx
+- Tests run and result: npm run build in apps/web (PASS 0 errors in 2.12s), scripts/guard.py (PASS 100%)
+- Acceptance criteria:
+  - Desktop-first 1440px layout with top search, queue filters, and status chips: met
+  - Filterable case table with priority badges, SLA timestamps, and queue counts: met
+  - Split case detail view (case metadata and timeline left, stage actions and verification right): met
+  - Approval modal showing action type, value, mandatory reason, and SHA-256 tamper-proof contract hash: met
+  - Reject modal requiring justification for audit trail: met
+  - Verification card showing Expected Net, Observed Net, and PASS/FAIL verdict: met
+  - Metrics rendered as four plain numbers without decorative slop: met
+  - A support user can approve and verify without scrolling past the fold on a 1440px screen: met
+  - Zero hard-coded hex colors; 100% theme tokens: met
+  - Zero backend edits: met
+- Left to do: U6-A6 (Copy and agent tone), U6-A7 (Accessibility fixes), U6-A8 (Visual QA and regression)
+- Gotchas: Replaced old dark slate backgrounds (bg-slate-900) with clean light theme tokens (bg-surface-card, bg-surface-canvas, border-surface-border).
+- Trust-rule check: no float money, no merchant_id in tool schemas, no secrets, scoped queries only (100% compliant)
