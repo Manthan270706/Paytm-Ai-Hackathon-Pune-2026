@@ -99,24 +99,39 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
       ? settlements.reduce((sum, b) => sum + parseFloat(b.net || '0'), 0)
       : 9000.0
 
+  // Dynamic live today string and times
+  const todayDateStr = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+  const shortDateStr = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+  })
+
   // Stepper state derived from most recent active case
   const activeCase = cases.length > 0 ? cases[0] : null
   const getStepperSteps = (caseItem: SupportCaseItem | null): StepItem[] => {
     const status = caseItem?.status || 'IN_PROGRESS'
+    const now = new Date()
+    const tReported = new Date(now.getTime() - 48 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const tChecking = new Date(now.getTime() - 44 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
     return [
       {
         id: 'reported',
         label: 'Reported',
         description: 'Issue logged',
         state: 'completed',
-        timestamp: '12 Nov, 10:15 AM',
+        timestamp: `${shortDateStr}, ${tReported}`,
       },
       {
         id: 'checking',
         label: 'Checking',
         description: 'Ledger verified',
         state: status === 'NEW' ? 'current' : 'completed',
-        timestamp: '12 Nov, 10:16 AM',
+        timestamp: `${shortDateStr}, ${tChecking}`,
       },
       {
         id: 'support',
@@ -151,7 +166,7 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
   }
 
   const categoryChips = [
-    { label: 'Settlement delay', prompt: 'Why is ₹6,000.00 missing from my settlement on 12 Nov?' },
+    { label: 'Settlement delay', prompt: "Why is ₹6,000.00 missing from today's settlement?" },
     { label: 'Refund issue', prompt: 'I want to check the status of customer refund for order #1082' },
     { label: 'Charges & Fees', prompt: 'What are the charges applied to my daily settlement batch?' },
     { label: 'Soundbox device', prompt: 'My Paytm Soundbox did not announce payment received' },
@@ -277,7 +292,7 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-surface-divider">
               <div>
                 <h3 className="text-sm font-semibold text-paytm-navy">
-                  Settlement Summary (12 Nov 2026)
+                  Settlement Summary ({todayDateStr})
                 </h3>
                 <p className="text-xs text-ink-secondary mt-0.5">
                   Daily settlement balance calculation
@@ -351,7 +366,7 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
             {/* Big Primary Action: Ask OpsSaathi */}
             <Button
               variant="primary"
-              onClick={() => triggerChat('Why is ₹6,000.00 missing from my settlement on 12 Nov?')}
+              onClick={() => triggerChat("Why is ₹6,000.00 missing from today's settlement?")}
               className="w-full min-h-12 text-sm font-semibold shadow-xs gap-2"
             >
               <MessageSquare className="w-4 h-4" />
@@ -412,15 +427,19 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
             </div>
 
             <div className="space-y-1 divide-y divide-surface-divider">
-              {transactions.slice(0, 3).map((txn) => (
-                <ListRow
-                  key={txn.id}
-                  title={txn.provider_txn_id}
-                  subtitle={txn.order_id}
-                  amount={`₹${parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                  onActivate={() => triggerChat(`Tell me about payment ${txn.provider_txn_id}`)}
-                />
-              ))}
+              {transactions.slice(0, 3).map((txn) => {
+                const txnDate = txn.txn_time ? new Date(txn.txn_time) : new Date()
+                const formattedTime = txnDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <ListRow
+                    key={txn.id}
+                    title={txn.provider_txn_id}
+                    subtitle={`${txn.order_id} • ${formattedTime}`}
+                    amount={`₹${parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    onActivate={() => triggerChat(`Tell me about payment ${txn.provider_txn_id}`)}
+                  />
+                )
+              })}
             </div>
           </div>
         </div>
@@ -450,29 +469,38 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
             />
           ) : (
             <div className="bg-surface-card rounded-card border border-surface-border divide-y divide-surface-divider overflow-hidden shadow-sm">
-              {transactions.map((txn) => (
-                <div key={txn.id} className="p-3.5 flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-ink-primary truncate">
-                        {txn.provider_txn_id}
-                      </span>
-                      <SourceBadge source={txn.source_type} size="sm" />
+              {transactions.map((txn) => {
+                const txnDate = txn.txn_time ? new Date(txn.txn_time) : new Date()
+                const formattedTime = txnDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                const formattedDate = txnDate.toLocaleDateString([], { day: 'numeric', month: 'short' })
+                return (
+                  <div key={txn.id} className="p-3.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink-primary truncate">
+                          {txn.provider_txn_id}
+                        </span>
+                        <SourceBadge source={txn.source_type} size="sm" />
+                      </div>
+                      <p className="text-[11px] text-ink-secondary mt-0.5 flex items-center gap-1.5 truncate">
+                        <span>Order: {txn.order_id}</span>
+                        <span>•</span>
+                        <span className="font-mono text-[10px] text-ink-muted">
+                          {formattedDate}, {formattedTime}
+                        </span>
+                      </p>
                     </div>
-                    <p className="text-[11px] text-ink-secondary mt-0.5 truncate">
-                      Order: {txn.order_id}
-                    </p>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-ink-primary block">
+                        ₹{parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-status-completed-bg text-status-completed-text border border-status-completed-border mt-0.5">
+                        {txn.status}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-sm font-bold text-ink-primary block">
-                      ₹{parseFloat(txn.amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-status-completed-bg text-status-completed-text border border-status-completed-border mt-0.5">
-                      {txn.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -516,7 +544,7 @@ export const MerchantDashboard: FC<MerchantDashboardProps> = ({
                     <div className="flex justify-between">
                       <span className="text-ink-secondary">Settlement Date:</span>
                       <span className="font-mono text-ink-primary">
-                        {batch.expected_settlement_date || batch.date}
+                        {batch.expected_settlement_date ? `${new Date(batch.expected_settlement_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${new Date(batch.date).toLocaleDateString([], { day: 'numeric', month: 'short' })})` : batch.date}
                       </span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-surface-divider">

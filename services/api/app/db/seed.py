@@ -143,8 +143,10 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
     )
     session.add(fee_rule)
 
-    # 6. Seed Successful Transactions (Total = ₹15,000)
-    # Txn 1: ₹5,000 (captured in batch)
+    # 6. Seed Successful Transactions (Live timestamps relative to current time)
+    now = datetime.now(UTC)
+
+    # Txn 1: ₹5,000 (captured in batch ~3 hours ago)
     txn_1 = Transaction(
         id=TXN_1_ID,
         merchant_id=MERCHANT_ID,
@@ -154,10 +156,10 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
         amount=Decimal("5000.00"),
         currency="INR",
         status="SUCCESS",
-        txn_time=datetime(2026, 11, 12, 10, 15, tzinfo=UTC),
+        txn_time=now - timedelta(hours=3, minutes=15),
         source_type="SYNTHETIC_DEMO",
     )
-    # Txn 2: ₹4,000 (captured in batch)
+    # Txn 2: ₹4,000 (captured in batch ~1.5 hours ago)
     txn_2 = Transaction(
         id=TXN_2_ID,
         merchant_id=MERCHANT_ID,
@@ -167,10 +169,10 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
         amount=Decimal("4000.00"),
         currency="INR",
         status="SUCCESS",
-        txn_time=datetime(2026, 11, 12, 12, 45, tzinfo=UTC),
+        txn_time=now - timedelta(hours=1, minutes=45),
         source_type="SYNTHETIC_DEMO",
     )
-    # Txn 3: ₹6,000 (missing from batch - the discrepancy!)
+    # Txn 3: ₹6,000 (missing from batch ~25 mins ago - the discrepancy!)
     txn_3 = Transaction(
         id=TXN_3_ID,
         merchant_id=MERCHANT_ID,
@@ -180,19 +182,19 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
         amount=Decimal("6000.00"),
         currency="INR",
         status="SUCCESS",
-        txn_time=datetime(2026, 11, 12, 16, 20, tzinfo=UTC),
+        txn_time=now - timedelta(minutes=24),
         source_type="SYNTHETIC_DEMO",
     )
     session.add_all([txn_1, txn_2, txn_3])
     await session.flush()
 
-    # 7. Seed Settlement Batch (Observed = ₹9,000, Expected settlement date in the past)
+    # 7. Seed Settlement Batch (Observed = ₹9,000, today's settlement date)
     batch = SettlementBatch(
         id=BATCH_ID,
         merchant_id=MERCHANT_ID,
         batch_ref="BATCH_20261112_01",
-        date=date(2026, 11, 12),
-        expected_settlement_date=datetime(2026, 11, 13, 10, 0, tzinfo=UTC),
+        date=now.date(),
+        expected_settlement_date=now - timedelta(hours=1),
         gross=Decimal("9000.00"),
         fees=Decimal("0.00"),
         refunds=Decimal("0.00"),
@@ -225,7 +227,6 @@ async def reset_and_seed(session: AsyncSession) -> dict[str, Any]:
     session.add_all([entry_1, entry_2])
 
     # 9. Seed Multi-Case Operations Portfolio (PRD Track 3 Gated & Cross-Queue Scenarios)
-    now = datetime.now(UTC)
 
     # Case 1: Golden ₹6,000 Overdue Settlement Mismatch (Settlement Ops, Awaiting Approval)
     case_1 = SupportCase(

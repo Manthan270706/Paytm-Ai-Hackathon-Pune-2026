@@ -137,7 +137,10 @@ async def get_watchdog_alerts(
     auth: Annotated[AuthContext, Depends(get_auth_context)],
 ) -> dict:
     """Returns active proactive watchdog alerts for merchant dashboard."""
-    # Deterministic active alert for seed scenario
+    now = datetime.now(UTC)
+    expected_window = f"Today by {(now + timedelta(hours=2)).strftime('%I:%M %p IST')}"
+
+    # Deterministic active alert for seed scenario with live expected window
     alert = WatchdogAlert(
         alert_id="WDG-SND-9842",
         batch_ref="BATCH_20261112_01",
@@ -146,17 +149,17 @@ async def get_watchdog_alerts(
         utr_number="NPCI/HDFC/20261112/984210",
         delay_reason="Clearing delay at nodal sponsor bank (NPCI settlement cycle cutoff spillover)",
         clearing_bank="HDFC Bank Nodal Account",
-        expected_credit_window="Today by 11:30 AM IST",
+        expected_credit_window=expected_window,
         case_number="CASE-2026-1024",
         case_id=str(CASE_1_ID),
         severity="WARNING",
         messages={
-            "en": "Paytm Pi Watchdog: ₹6,000 settlement queued at nodal bank (UTR: NPCI/HDFC/20261112/984210). Case CASE-2026-1024 tracking. Expected credit: 11:30 AM.",
-            "hi": "पेटीएम पाई वॉचडॉग: ₹६,००० का सेटलमेंट नोडल बैंक में लंबित (UTR: NPCI/HDFC/20261112/984210)। केस CASE-2026-1024 सक्रिय। संभावित क्रेडिट: ११:३० AM।",
-            "mr": "पेटीएम पाय वॉचडॉग: ₹६,००० सेटलमेंट नोडल बँकेत प्रलंबित आहे. केस CASE-2026-1024 सक्रिय. अपेक्षित क्रेडिट: ११:३० AM.",
+            "en": f"Paytm Pi Watchdog: ₹6,000 settlement queued at nodal bank (UTR: NPCI/HDFC/20261112/984210). Case CASE-2026-1024 tracking. Expected credit: {expected_window}.",
+            "hi": f"पेटीएम पाई वॉचडॉग: ₹६,००० का सेटलमेंट नोडल बैंक में लंबित (UTR: NPCI/HDFC/20261112/984210)। केस CASE-2026-1024 सक्रिय। संभावित क्रेडिट: {expected_window}।",
+            "mr": f"पेटीएम पाय वॉचडॉग: ₹६,००० सेटलमेंट नोडल बँकेत प्रलंबित आहे. केस CASE-2026-1024 सक्रिय. अपेक्षित क्रेडिट: {expected_window}.",
         },
-        soundbox_announcement="पेटीएम पर छह हज़ार रुपये का सेटलमेंट नोडल बैंक में प्रोसेस हो रहा है। ग्यारह तीस तक आपके खाते में आ जाएगा।",
-        detected_at=(datetime.now(UTC) - timedelta(minutes=15)).isoformat(),
+        soundbox_announcement="पेटीएम पर छह हज़ार रुपये का सेटलमेंट नोडल बैंक में प्रोसेस हो रहा है। जल्द ही आपके खाते में आ जाएगा।",
+        detected_at=(now - timedelta(minutes=14)).isoformat(),
         status="PROACTIVELY_RESOLVING",
     )
 
